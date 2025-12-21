@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>ZeldWallet Web Component</title>
+    <script type="module">
+      import { Buffer } from 'buffer';
+      if (!window.Buffer) {
+        window.Buffer = Buffer;
+      }
+    </script>
+    <style>
+      body {
+        font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+        background: #f8fafc;
+        margin: 24px;
+        color: #0f172a;
+      }
+      .page {
+        max-width: 720px;
+        margin: 0 auto;
+        display: grid;
+        gap: 16px;
+      }
+      .controls {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+      }
+      select,
+      button {
+        padding: 8px 12px;
+        border-radius: 8px;
+        border: 1px solid #cbd5e1;
+        background: #fff;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      button {
+        background: #2563eb;
+        color: #fff;
+        border-color: #2563eb;
+      }
+      /* Example style overrides for the component */
+      .dark-card ::part(container),
+      .dark-card .zeldwallet-card {
+        background: #0b1021;
+        color: #e2e8f0;
+        border-color: #1e293b;
+      }
+      .dark-card .zeldwallet-row {
+        background: #11172b;
+        border-color: #1e293b;
+      }
+      .dark-card .zeldwallet-copy,
+      .dark-card .zeldwallet-password-button {
+        background: #22c55e;
+        border-color: #22c55e;
+      }
+      .sign-card {
+        background: #fff;
+        border: 1px solid #cbd5e1;
+        border-radius: 12px;
+        padding: 16px;
+        box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
+        display: grid;
+        gap: 10px;
+      }
+      .sign-card textarea {
+        width: 100%;
+        border: 1px solid #cbd5e1;
+        border-radius: 8px;
+        padding: 10px;
+        min-height: 90px;
+        font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      }
+      .sign-card pre {
+        margin: 0;
+        padding: 10px;
+        background: #0f172a;
+        color: #e2e8f0;
+        border-radius: 8px;
+        font-size: 13px;
+        overflow-x: auto;
+      }
+      .sign-card button {
+        width: fit-content;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <h1>ZeldWallet Web Component</h1>
+      <p>
+        The component silently creates or unlocks a ZeldWallet instance on connect, renders payment
+        and ordinals addresses, and shows a password prompt if the wallet is protected.
+      </p>
+
+      <div class="controls">
+        <label for="lang">Language:</label>
+        <select id="lang"></select>
+        <button id="destroy" type="button">Destroy Wallet</button>
+        <label><input id="dark" type="checkbox" checked /> Dark card styles</label>
+      </div>
+
+      <zeld-wallet-ui id="wallet" lang="en" autoconnect="true" class="dark-card"></zeld-wallet-ui>
+
+      <div class="sign-card">
+        <h2>Programmatic signing</h2>
+        <p>
+          Once the component is unlocked, you can call the underlying <code>ZeldWallet</code> instance.
+          This example signs an arbitrary message using the derived payment address.
+        </p>
+        <label for="message">Message to sign</label>
+        <textarea id="message" placeholder="Hello Bitcoin!"></textarea>
+        <button id="sign" type="button">Sign message</button>
+        <div>
+          <strong>Signature output</strong>
+          <pre id="signature">(waiting for signature)</pre>
+        </div>
+      </div>
+    </div>
+
+    <script type="module">
+      import { defineZeldWalletUI, ZeldWallet, UnifiedWallet, languages } from '../dist/zeldwallet.es.js';
+
+      defineZeldWalletUI();
+
+      let walletEl = document.getElementById('wallet');
+      const langEl = document.getElementById('lang');
+      const darkEl = document.getElementById('dark');
+      const destroyEl = document.getElementById('destroy');
+      const messageEl = document.getElementById('message');
+      const signEl = document.getElementById('sign');
+      const signatureEl = document.getElementById('signature');
+
+      // Populate language dropdown
+      languages.forEach((lang) => {
+        const option = document.createElement('option');
+        option.value = lang.code;
+        option.textContent = `${lang.native} (${lang.name})`;
+        langEl.appendChild(option);
+      });
+
+      const recreateWallet = () => {
+        const replacement = document.createElement('zeld-wallet-ui');
+        replacement.id = 'wallet';
+        replacement.setAttribute('lang', langEl.value);
+        replacement.setAttribute('autoconnect', 'true');
+        if (darkEl.checked) replacement.classList.add('dark-card');
+        walletEl.replaceWith(replacement);
+        walletEl = replacement;
+      };
+
+      langEl.addEventListener('change', () => {
+        walletEl.setAttribute('lang', langEl.value);
+      });
+
+      darkEl.addEventListener('change', () => {
+        walletEl.classList.toggle('dark-card', darkEl.checked);
+      });
+
+      destroyEl.addEventListener('click', async () => {
+        await ZeldWallet.destroy();
+        UnifiedWallet.reset();
+        recreateWallet();
+      });
+
+      const getPaymentAddress = () => {
+        const addresses = UnifiedWallet.getAddresses(['payment']);
+        return addresses?.[0]?.address;
+      };
+
+      signEl.addEventListener('click', async () => {
+        signatureEl.textContent = 'Signing...';
+        try {
+          const paymentAddress = getPaymentAddress();
+          if (!paymentAddress) {
+            signatureEl.textContent = 'Connect a wallet and fetch an address first.';
+            return;
+          }
+          const message = messageEl.value.trim() || 'Hello Bitcoin!';
+          const signature = await UnifiedWallet.signMessage(message, paymentAddress);
+          const signer = UnifiedWallet.getActiveName();
+          signatureEl.textContent = `${signer}: ${signature}`;
+        } catch (error) {
+          signatureEl.textContent = error instanceof Error ? error.message : String(error);
+        }
+      });
+    </script>
+  </body>
+</html>
+

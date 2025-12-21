@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>ZeldWallet + sats-connect</title>
+    <!-- Provide Buffer globally before sats-connect scripts run -->
+    <script type="module">
+      import { Buffer } from 'buffer';
+      if (!window.Buffer) {
+        window.Buffer = Buffer;
+      }
+    </script>
+    <style>
+      body {
+        font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+        margin: 24px;
+        line-height: 1.4;
+      }
+      h1 {
+        margin-top: 0;
+      }
+      #wallet-list {
+        display: grid;
+        gap: 12px;
+        margin: 16px 0;
+      }
+      .wallet-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px;
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        background: #fafafa;
+      }
+      .wallet-meta {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .wallet-icon {
+        width: 32px;
+        height: 32px;
+        border-radius: 6px;
+        object-fit: cover;
+        background: #eef2f7;
+      }
+      .wallet-names {
+        display: flex;
+        flex-direction: column;
+      }
+      .wallet-id {
+        color: #6b7280;
+        font-size: 12px;
+      }
+      button {
+        cursor: pointer;
+        padding: 8px 14px;
+        border-radius: 8px;
+        border: 1px solid #2563eb;
+        background: #2563eb;
+        color: white;
+        font-weight: 600;
+      }
+      button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+      pre {
+        background: #0b1021;
+        color: #e5e7eb;
+        padding: 12px;
+        border-radius: 8px;
+        max-width: 900px;
+        overflow: auto;
+        min-height: 120px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Wallets detected by sats-connect</h1>
+    <div id="wallet-list"></div>
+    <pre id="log"></pre>
+
+    <script type="module">
+      import { ZeldWallet } from '../dist/zeldwallet.es.js';
+      import satsConnect, { getAddress, AddressPurpose, BitcoinNetworkType } from 'sats-connect';
+
+      const logEl = document.getElementById('log');
+      const log = (message) => (logEl.textContent += `${message}\n`);
+      const logAttempt = (label, err) => {
+        const detail = err?.message ?? err;
+        log(`Attempt ${label} failed: ${detail}`);
+      };
+      const FALLBACK_ICON =
+        'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="8" fill="%23eef2f7"/><path d="M9 21l4-6 3 4 3-5 4 7" stroke="%232563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="11" r="2" fill="%232563eb"/></svg>';
+      const ADDRESS_PARAMS = {
+        purposes: ['payment', 'ordinals'],
+        network: { type: 'Mainnet' },
+        message: 'Requesting addresses for demo',
+      };
+
+      const getByPath = (root, path) =>
+        path.split('.').reduce((acc, part) => (acc ? acc[part] : undefined), root);
+
+      const normalizeResponse = (resp) => {
+        if (!resp) return resp;
+        if (resp.jsonrpc === '2.0') {
+          if (resp.error) throw resp.error;
+          return resp.result;
+        }
+        if (resp.status === 'error') throw resp.error ?? resp;
+        if (resp.status === 'success') return resp.result;
+        return resp;
+      };
+
+      const main = async () => {
+        // Keep provider choice predictable for the demo.
+        try {
+          localStorage.removeItem('sats-connect:provider');
+          localStorage.removeItem('sats-connect:preferred-provider');
+          localStorage.setItem('sats-connect_defaultProvider', 'ZeldWallet.rpc');
+        } catch (err) {
+          console.warn('Could not clear sats-connect cache', err);
+        }
+
+        const wallet = new ZeldWallet();
+        let rpcCompatProvider = null;
+        let zeldProviderReady = false;
+
+        const ensureZeldUnlocked = async () => {
+          if (zeldProviderReady) return rpcCompatProvider;
+
+          // Create passwordless wallet if none exists, otherwise prompt for password on demand.
+          let exists = false;
+          try {
+            exists = await wallet.exists();
+          } catch {
+            exists = false;
+          }
+
+          if (!exists) {
+            await wallet.create();
+          } else {
+            const password =
+              (window.prompt('Enter the ZeldWallet password to unlock for this demo') || '').trim() || undefined;
+            try {
+              await wallet.unlock(password);
+            } catch (err) {
+              const missing = err?.message?.toLowerCase?.().includes('not found');
+              if (missing) {
+                await wallet.create();
+              } else {
+                throw err;
+              }
+            }
+          }
+
+          wallet.registerProvider({
+            id: 'ZeldWallet',
+            name: 'Zeld Wallet',
+          });
+
+          const wbipProvider = window.ZeldWallet;
+          rpcCompatProvider = {
+            request: async (method, params) => {
+              try {
+                const result = await wbipProvider.request(method, params);
+                return { jsonrpc: '2.0', result, id: 'zeldwallet' };
+              } catch (error) {
+                const wbip = error && typeof error === 'object' && 'code' in error && 'message' in error;
+                return {
+                  jsonrpc: '2.0',
+                  error: wbip ? error : { code: -32603, message: 'Internal error', data: error },
+                  id: 'zeldwallet',
+                };
+              }
+            },
+            on: wbipProvider.on?.bind(wbipProvider),
+            off: wbipProvider.off?.bind(wbipProvider),
+          };
+          wbipProvider.rpc = rpcCompatProvider;
+
+          zeldProviderReady = true;
+          return rpcCompatProvider;
+        };
+
+        // Some wallets do not support getInfo; shim a minimal response when requested.
+        const buildGetInfoShim = (provider) => {
+          if (!provider || typeof provider.request !== 'function') return provider;
+          if (provider.__zw_getInfoShimmed) return provider;
+          const shimmed = {
+            ...provider,
+            request: async (method, params) => {
+              if (method !== 'getInfo') return provider.request(method, params);
+              try {
+                return await provider.request(method, params);
+              } catch (err) {
+                const code = err?.code;
+                const message = err?.message ?? '';
+                const unsupported = code === -32601 || message.includes('getInfo');
+                if (!unsupported) throw err;
+                return {
+                  version: '1.0.0',
+                  platform: 'web',
+                  methods: ['getAddresses', 'signMessage', 'signPsbt'],
+                  supports: ['WBIP004', 'WBIP005', 'WBIP006'],
+                };
+              }
+            },
+          };
+          Object.defineProperty(shimmed, '__zw_getInfoShimmed', { value: true });
+          return shimmed;
+        };
+
+        // Build the ZeldWallet entry (always first)
+        const zeldEntry = {
+          id: 'ZeldWallet.rpc',
+          name: 'Zeld Wallet',
+          icon: 'data:image/svg+xml;base64,',
+          getProvider: async () => buildGetInfoShim(await ensureZeldUnlocked()),
+        };
+
+        // Surface Magic Eden if the extension is injected at window.magicEden.bitcoin
+        const magicEdenInjected = getByPath(window, 'magicEden.bitcoin');
+        const magicEdenEntries = magicEdenInjected
+          ? [
+              {
+                id: 'magicEden.bitcoin',
+                name: 'Magic Eden Wallet',
+                icon: magicEdenInjected.icon || magicEdenInjected.logo || FALLBACK_ICON,
+                provider: magicEdenInjected,
+                getProvider: async () => getByPath(window, 'magicEden.bitcoin'),
+              },
+            ]
+          : [];
+
+        // Surface Leather wallet if injected at window.LeatherProvider or window.btc
+        const leatherInjected = window.LeatherProvider || window.btc;
+        const leatherEntries = leatherInjected
+          ? [
+              {
+                id: 'LeatherProvider',
+                name: 'Leather',
+                icon: leatherInjected.icon || leatherInjected.logo || FALLBACK_ICON,
+                provider: leatherInjected,
+                getProvider: async () => window.LeatherProvider || window.btc,
+              },
+            ]
+          : [];
+
+        // Collect other existing providers (filter out duplicates)
+        const existingProviders = Array.isArray(window.btc_providers) ? window.btc_providers : [];
+        const filteredExisting = existingProviders
+          .filter(
+            (p) => p && typeof p === 'object' && p.id !== 'ZeldWallet.rpc' && p.id !== 'magicEden.bitcoin' && p.id !== 'LeatherProvider',
+          )
+          .map((entry) => ({
+            ...entry,
+            getProvider: async () => buildGetInfoShim((await entry.getProvider?.()) || entry.provider || entry),
+          }));
+
+        // ZeldWallet is always first
+        window.btc_providers = [zeldEntry, ...magicEdenEntries, ...leatherEntries, ...filteredExisting];
+
+        const walletList = document.getElementById('wallet-list');
+
+        const providerHasInterface = (candidate) =>
+          candidate &&
+          typeof candidate === 'object' &&
+          (typeof candidate.request === 'function' ||
+            typeof candidate.getAddresses === 'function' ||
+            typeof candidate.connect === 'function');
+
+        const resolveProvider = async (entry) => {
+          const candidates = [
+            await entry.getProvider?.(),
+            entry.provider,
+            getByPath(window, entry.id),
+            getByPath(window, `${entry.id}.provider`),
+          ].filter(providerHasInterface);
+          const provider = candidates.find(providerHasInterface);
+          return buildGetInfoShim(provider);
+        };
+
+        const connectWith = async (entry) => {
+          const provider = await resolveProvider(entry);
+          const isMagicEden =
+            entry.id?.toLowerCase?.().includes('magiceden') || entry.name?.toLowerCase?.().includes('magic eden');
+          const isXverse =
+            entry.id?.toLowerCase?.().includes('xverse') || entry.name?.toLowerCase?.().includes('xverse');
+          const isLeather =
+            entry.id?.toLowerCase?.().includes('leather') || entry.name?.toLowerCase?.().includes('leather');
+
+          const requestFn = typeof provider?.request === 'function' ? provider.request.bind(provider) : null;
+          const attempts = [];
+
+          if (isMagicEden) {
+            attempts.push({
+              label: 'magicEden.getAddress',
+              fn: () =>
+                new Promise((resolve, reject) => {
+                  getAddress({
+                    getProvider: () => window.magicEden?.bitcoin,
+                    payload: {
+                      purposes: [AddressPurpose.Ordinals, AddressPurpose.Payment],
+                      message: ADDRESS_PARAMS.message,
+                      network: { type: BitcoinNetworkType.Mainnet },
+                    },
+                    onFinish: (response) => resolve(response),
+                    onCancel: () => reject(new Error('User cancelled')),
+                  });
+                }),
+            });
+          }
+
+          if (isLeather && requestFn) {
+            const leatherParams = { purposes: ADDRESS_PARAMS.purposes };
+            attempts.push({
+              label: 'leather.request(getAddresses, simple)',
+              fn: () => requestFn('getAddresses', leatherParams).then(normalizeResponse),
+            });
+            attempts.push({
+              label: 'leather.request(getAddresses, empty)',
+              fn: () => requestFn('getAddresses', {}).then(normalizeResponse),
+            });
+          }
+
+          if (requestFn) {
+            if (isXverse) {
+              attempts.push({
+                label: 'request(wallet_connect)',
+                fn: () => requestFn('wallet_connect', ADDRESS_PARAMS),
+              });
+            }
+            attempts.push({
+              label: 'request(getAddresses)',
+              fn: () => requestFn('getAddresses', ADDRESS_PARAMS).then(normalizeResponse),
+            });
+            attempts.push({
+              label: 'request({method:getAddresses})',
+              fn: () => requestFn({ method: 'getAddresses', params: ADDRESS_PARAMS }).then(normalizeResponse),
+            });
+          }
+
+          if (typeof provider?.connect === 'function') {
+            attempts.push({
+              label: 'connect+getAddresses',
+              fn: async () => {
+                await provider.connect(ADDRESS_PARAMS);
+                if (provider.getAddresses) return provider.getAddresses(ADDRESS_PARAMS);
+                return requestFn?.('getAddresses', ADDRESS_PARAMS);
+              },
+            });
+          }
+
+          if (typeof provider?.getAddresses === 'function') {
+            attempts.push({
+              label: 'getAddresses',
+              fn: () => provider.getAddresses(ADDRESS_PARAMS),
+            });
+          }
+
+          attempts.push({
+            label: 'satsConnect.request(getAddresses)',
+            fn: () => satsConnect.request('getAddresses', ADDRESS_PARAMS, entry.id, { skipGetInfo: true }),
+          });
+
+          let lastError;
+          for (const attempt of attempts) {
+            try {
+              return normalizeResponse(await attempt.fn());
+            } catch (err) {
+              lastError = err;
+              logAttempt(attempt.label, err);
+            }
+          }
+          throw lastError ?? new Error('No provider response');
+        };
+
+        const renderWallets = () => {
+          const providers = window.btc_providers || [];
+          walletList.innerHTML = '';
+          if (!providers.length) {
+            walletList.textContent = 'No wallet detected. Open a wallet extension/tab first.';
+            return;
+          }
+
+          providers.forEach((entry) => {
+            const row = document.createElement('div');
+            row.className = 'wallet-row';
+
+            const meta = document.createElement('div');
+            meta.className = 'wallet-meta';
+
+            const icon = document.createElement('img');
+            icon.className = 'wallet-icon';
+            icon.alt = entry.name || entry.id;
+            icon.src = entry.icon || FALLBACK_ICON;
+            icon.onerror = () => {
+              icon.onerror = null;
+              icon.src = FALLBACK_ICON;
+            };
+
+            const names = document.createElement('div');
+            names.className = 'wallet-names';
+            names.innerHTML = `<strong>${entry.name || entry.id}</strong><span class="wallet-id">${entry.id}</span>`;
+
+            meta.appendChild(icon);
+            meta.appendChild(names);
+
+            const button = document.createElement('button');
+            button.textContent = 'Connect';
+            button.onclick = async () => {
+              button.disabled = true;
+              log(`Connecting to ${entry.name || entry.id}...`);
+              try {
+                const result = await connectWith(entry);
+                log(`Addresses from ${entry.name || entry.id}: ${JSON.stringify(result, null, 2)}`);
+              } catch (err) {
+                log(`Error with ${entry.name || entry.id}: ${err?.message ?? JSON.stringify(err)}`);
+              } finally {
+                button.disabled = false;
+              }
+            };
+
+            row.appendChild(meta);
+            row.appendChild(button);
+            walletList.appendChild(row);
+          });
+        };
+
+        renderWallets();
+        window.addEventListener('focus', renderWallets);
+        window.addEventListener('visibilitychange', () => {
+          if (document.visibilityState === 'visible') renderWallets();
+        });
+      };
+
+      main().catch((err) => {
+        console.error('Failed to initialize sats-connect demo', err);
+        log(`Error: ${err?.message ?? err}`);
+      });
+    </script>
+  </body>
+</html>

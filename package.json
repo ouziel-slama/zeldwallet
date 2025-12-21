@@ -1,0 +1,71 @@
+{
+  "name": "zeldwallet",
+  "version": "0.1.0",
+  "description": "Lightweight JavaScript library for creating a Bitcoin wallet directly in the browser",
+  "type": "module",
+  "main": "./dist/zeldwallet.umd.js",
+  "module": "./dist/zeldwallet.es.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/zeldwallet.es.js",
+      "require": "./dist/zeldwallet.umd.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "peerDependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "lint": "eslint src --ext .ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "bitcoin",
+    "wallet",
+    "browser",
+    "wbip",
+    "bip32",
+    "bip39",
+    "taproot",
+    "segwit"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@noble/hashes": "^1.3.3",
+    "@noble/secp256k1": "^2.1.0",
+    "@scure/bip32": "^1.4.0",
+    "@scure/bip39": "^1.3.0",
+    "bitcoinjs-lib": "^6.1.6",
+    "buffer": "^6.0.3",
+    "idb": "^8.0.0",
+    "sats-connect": "^4.2.1",
+    "tiny-secp256k1": "^2.2.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/react": "^18.2.43",
+    "@types/react-dom": "^18.2.17",
+    "@vitejs/plugin-react": "^4.1.0",
+    "fake-indexeddb": "^6.2.5",
+    "jsdom": "^27.3.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "typescript": "^5.3.0",
+    "vite": "^5.0.0",
+    "vite-plugin-dts": "^3.6.0",
+    "vite-plugin-top-level-await": "^1.6.0",
+    "vite-plugin-wasm": "^3.5.0",
+    "vitest": "^1.0.0"
+  }
+}

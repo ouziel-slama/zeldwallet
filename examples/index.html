@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ZeldWallet Examples</title>
+    <style>
+      :root {
+        color-scheme: light;
+      }
+      body {
+        margin: 0;
+        font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+        background: #f8fafc;
+        color: #0f172a;
+      }
+      main {
+        max-width: 960px;
+        margin: 32px auto 64px;
+        padding: 0 16px;
+        display: grid;
+        gap: 24px;
+      }
+      header {
+        display: grid;
+        gap: 8px;
+      }
+      .grid {
+        display: grid;
+        gap: 16px;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      }
+      .card {
+        display: grid;
+        gap: 8px;
+        padding: 16px;
+        border-radius: 12px;
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+        color: inherit;
+        text-decoration: none;
+        transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease;
+      }
+      .card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 12px 30px rgba(15, 23, 42, 0.12);
+        border-color: #cbd5e1;
+      }
+      h1 {
+        margin: 0;
+        font-size: 28px;
+      }
+      h2 {
+        margin: 0;
+        font-size: 18px;
+      }
+      .meta {
+        font-size: 14px;
+        color: #334155;
+      }
+      .hint {
+        padding: 12px 14px;
+        border-radius: 10px;
+        background: #e0f2fe;
+        color: #0f172a;
+        border: 1px solid #bae6fd;
+      }
+      code {
+        background: #0f172a;
+        color: #e2e8f0;
+        padding: 2px 6px;
+        border-radius: 6px;
+        font-size: 13px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>ZeldWallet examples</h1>
+        <p class="meta">
+          Run <code>npm run dev</code> from the repo root, then open <code>http://localhost:5173/</code>.
+          Pick any demo below.
+        </p>
+      </header>
+
+      <section class="grid">
+        <a class="card" href="./web-component.html">
+          <h2>Web component</h2>
+          <p>
+            Showcases the native <code>&lt;zeld-wallet-ui&gt;</code> element with language toggle, dark mode
+            styles, and message signing.
+          </p>
+        </a>
+
+        <a class="card" href="./with-sats-connect.html">
+          <h2>sats-connect integration</h2>
+          <p>
+            Demonstrates wallet discovery via WBIP004 and sats-connect, includes provider registration and
+            request/response logging.
+          </p>
+        </a>
+
+        <a class="card" href="./react/">
+          <h2>React demo</h2>
+          <p>
+            Renders the <code>&lt;ZeldWalletCard&gt;</code> wrapper, toggles language + variant, and signs a
+            message once the wallet is unlocked.
+          </p>
+        </a>
+      </section>
+
+      <div class="hint">
+        Tip: the demos load <code>dist/zeldwallet.es.js</code>. Run <code>npm run build</code> after changing
+        the library to refresh the bundle.
+      </div>
+    </main>
+  </body>
+</html>
+
+
