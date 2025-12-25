@@ -2,7 +2,7 @@ import type { NetworkType } from '../types';
 import { formatBtc, formatZeld, truncateAddress } from './balance';
 import { BITCOIN_ICON, DUST, MIN_FEE_RESERVE, ORDINALS_ICON } from './constants';
 import type { LocaleStrings, TextDirection } from './i18n';
-import type { ComponentState } from './state';
+import type { ComponentState, FeeMode } from './state';
 import { FALLBACK_ICON, type SupportedWalletId } from './wallets';
 
 export type RenderTemplateProps = {
@@ -134,6 +134,8 @@ export type MiningResultView = {
   congratsMessage: string;
   txidLabel: string;
   txid: string;
+  psbt?: string;
+  copyPsbtLabel: string;
   signAndBroadcastLabel: string;
   mempoolUrl?: string;
   viewOnMempoolLabel: string;
@@ -141,6 +143,57 @@ export type MiningResultView = {
   cancelLabel: string;
   showSignButton: boolean;
   showMempoolLink: boolean;
+};
+
+/** Input row for confirmation dialog */
+export type ConfirmDialogInputView = {
+  txid: string;
+  vout: number;
+  address: string;
+  addressTruncated: string;
+  valueFormatted: string;
+  valueSats: number;
+};
+
+/** Output row for confirmation dialog */
+export type ConfirmDialogOutputView = {
+  address: string;
+  addressTruncated: string;
+  valueFormatted: string;
+  valueSats: number;
+  isChange: boolean;
+  /** Whether this is an OP_RETURN output */
+  isOpReturn: boolean;
+  /** Formatted OP_RETURN display string (e.g., "OP_RETURN: 12345" or "OP_RETURN: ZELD [600, 300, 100]") */
+  opReturnDisplay?: string;
+};
+
+/** Confirmation dialog view */
+export type ConfirmDialogView = {
+  visible: boolean;
+  title: string;
+  inputsLabel: string;
+  outputsLabel: string;
+  feeLabel: string;
+  totalLabel: string;
+  confirmLabel: string;
+  cancelLabel: string;
+  changeLabel: string;
+  inputs: ConfirmDialogInputView[];
+  outputs: ConfirmDialogOutputView[];
+  feeFormatted: string;
+  feeSats: number;
+  totalInputFormatted: string;
+  totalOutputFormatted: string;
+};
+
+/** Fee option for the selector */
+export type FeeOptionView = {
+  mode: FeeMode;
+  label: string;
+  rate: number;
+  rateFormatted: string;
+  selected: boolean;
 };
 
 export type HuntingView = {
@@ -166,6 +219,18 @@ export type HuntingView = {
   amount: string;
   addressError?: string;
   amountError?: string;
+  // Fee selection
+  feeLabel: string;
+  feeUnitLabel: string;
+  feeMode: FeeMode;
+  feeOptions: FeeOptionView[];
+  customFeeRate: string;
+  customFeePlaceholder: string;
+  showCustomFeeInput: boolean;
+  feeLoading: boolean;
+  feeError?: string;
+  feeExpanded: boolean;
+  currentFeeDisplay: string;
   // Mining state
   isMining: boolean;
   miningProgress?: MiningProgressView;
@@ -175,6 +240,8 @@ export type HuntingView = {
   // Labels for error state
   retryLabel: string;
   cancelLabel: string;
+  // Confirmation dialog
+  confirmDialog?: ConfirmDialogView;
 };
 
 export type WalletViewModel = {
@@ -420,6 +487,26 @@ export const buildViewModel = ({
 };
 
 /**
+ * Gets the display string for the current fee selection.
+ */
+function getCurrentFeeDisplay(
+  hunting: NonNullable<ComponentState['hunting']>,
+  feeModeLabels: Record<FeeMode, string>
+): string {
+  const recommendedFees = hunting.recommendedFees ?? { slow: 6, medium: 12, fast: 24 };
+  const mode = hunting.feeMode;
+  const label = feeModeLabels[mode];
+  
+  if (mode === 'custom') {
+    const rate = parseFloat(hunting.customFeeRate.trim()) || 0;
+    return rate > 0 ? `${label} (${rate})` : label;
+  }
+  
+  const rate = recommendedFees[mode];
+  return `${label} (${rate})`;
+}
+
+/**
  * Builds the hunting section view model.
  */
 function buildHuntingView(state: ComponentState, strings: LocaleStrings): HuntingView | undefined {
@@ -486,6 +573,28 @@ function buildHuntingView(state: ComponentState, strings: LocaleStrings): Huntin
       break;
   }
 
+  // Build fee options
+  const recommendedFees = hunting.recommendedFees ?? { slow: 6, medium: 12, fast: 24 };
+  const feeModeLabels: Record<FeeMode, string> = {
+    slow: strings.feeModeSlow,
+    medium: strings.feeModeMedium,
+    fast: strings.feeModeFast,
+    custom: strings.feeModeCustom,
+  };
+
+  const feeOptions: FeeOptionView[] = (['slow', 'medium', 'fast', 'custom'] as FeeMode[]).map((mode) => {
+    const rate = mode === 'custom'
+      ? (parseFloat(hunting.customFeeRate.trim()) || 0)
+      : recommendedFees[mode];
+    return {
+      mode,
+      label: feeModeLabels[mode],
+      rate,
+      rateFormatted: mode === 'custom' && !hunting.customFeeRate.trim() ? '—' : `${rate}`,
+      selected: hunting.feeMode === mode,
+    };
+  });
+
   return {
     visible: true,
     sendBtcLabel: strings.huntingSendBtc,
@@ -509,6 +618,18 @@ function buildHuntingView(state: ComponentState, strings: LocaleStrings): Huntin
     amount: hunting.amount,
     addressError: hunting.addressError,
     amountError: hunting.amountError,
+    // Fee selection
+    feeLabel: strings.feeLabel,
+    feeUnitLabel: strings.feeUnitLabel,
+    feeMode: hunting.feeMode,
+    feeOptions,
+    customFeeRate: hunting.customFeeRate,
+    customFeePlaceholder: strings.feeCustomPlaceholder,
+    showCustomFeeInput: hunting.feeMode === 'custom',
+    feeLoading: hunting.feeLoading ?? false,
+    feeError: hunting.feeError,
+    feeExpanded: hunting.feeExpanded ?? false,
+    currentFeeDisplay: getCurrentFeeDisplay(hunting, feeModeLabels),
     isMining,
     miningProgress,
     miningResult,
@@ -516,6 +637,76 @@ function buildHuntingView(state: ComponentState, strings: LocaleStrings): Huntin
     miningStatusMessage,
     retryLabel: strings.miningRetry,
     cancelLabel: strings.miningCancel,
+    confirmDialog: buildConfirmDialogView(hunting, strings),
+  };
+}
+
+/**
+ * Builds the confirmation dialog view model.
+ */
+function buildConfirmDialogView(
+  hunting: NonNullable<ComponentState['hunting']>,
+  strings: LocaleStrings
+): ConfirmDialogView | undefined {
+  if (!hunting.showConfirmDialog || !hunting.parsedTransaction) {
+    return undefined;
+  }
+
+  const tx = hunting.parsedTransaction;
+
+  const inputs: ConfirmDialogInputView[] = tx.inputs.map((input) => ({
+    txid: input.txid,
+    vout: input.vout,
+    address: input.address,
+    addressTruncated: truncateAddress(input.address),
+    valueFormatted: formatBtc(input.value),
+    valueSats: input.value,
+  }));
+
+  const outputs: ConfirmDialogOutputView[] = tx.outputs.map((output) => {
+    const isOpReturn = !!output.opReturn;
+    let opReturnDisplay: string | undefined;
+    
+    if (output.opReturn) {
+      if (output.opReturn.type === 'zeld' && output.opReturn.distribution) {
+        // ZELD distribution: show amounts (last element is the nonce, so exclude it)
+        const amounts = output.opReturn.distribution.slice(0, -1);
+        opReturnDisplay = `OP_RETURN: ZELD [${amounts.join(', ')}]`;
+      } else if (output.opReturn.type === 'nonce' && output.opReturn.nonce !== undefined) {
+        // Simple nonce
+        opReturnDisplay = `OP_RETURN: ${output.opReturn.nonce.toString()}`;
+      } else {
+        opReturnDisplay = 'OP_RETURN';
+      }
+    }
+    
+    return {
+      address: output.address,
+      addressTruncated: isOpReturn ? (opReturnDisplay ?? 'OP_RETURN') : truncateAddress(output.address),
+      valueFormatted: formatBtc(output.value),
+      valueSats: output.value,
+      isChange: output.isChange ?? false,
+      isOpReturn,
+      opReturnDisplay,
+    };
+  });
+
+  return {
+    visible: true,
+    title: strings.confirmDialogTitle,
+    inputsLabel: strings.confirmDialogInputsLabel,
+    outputsLabel: strings.confirmDialogOutputsLabel,
+    feeLabel: strings.confirmDialogFeeLabel,
+    totalLabel: strings.confirmDialogTotalLabel,
+    confirmLabel: strings.confirmDialogConfirm,
+    cancelLabel: strings.confirmDialogCancel,
+    changeLabel: strings.confirmDialogChangeLabel,
+    inputs,
+    outputs,
+    feeFormatted: formatBtc(tx.fee),
+    feeSats: tx.fee,
+    totalInputFormatted: formatBtc(tx.totalInputValue),
+    totalOutputFormatted: formatBtc(tx.totalOutputValue),
   };
 }
 
@@ -711,6 +902,7 @@ function buildMiningResultView(
 
   const result = hunting.miningResult;
   const txid = result?.txid ?? '';
+  const psbt = result?.psbt;
   const broadcastTxid = hunting.broadcastTxid;
   const showMempoolLink = !!broadcastTxid;
   const mempoolUrl = broadcastTxid ? `https://mempool.space/tx/${broadcastTxid}` : undefined;
@@ -719,6 +911,8 @@ function buildMiningResultView(
     congratsMessage: strings.miningCongrats,
     txidLabel: strings.miningTxidLabel,
     txid,
+    psbt,
+    copyPsbtLabel: strings.miningCopyPsbt,
     signAndBroadcastLabel: strings.miningSignAndBroadcast,
     mempoolUrl,
     viewOnMempoolLabel: strings.miningViewOnMempool,

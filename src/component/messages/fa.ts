@@ -34,7 +34,7 @@ export const fa: LocaleStringsInput = {
   showPassword: 'نمایش رمز عبور',
   hidePassword: 'پنهان کردن رمز عبور',
   ready: 'کیف پول آماده است',
-  readyHint: 'کیف پول شما آماده است! این آدرس‌های شماست:',
+  readyHint: 'آدرس‌ها و موجودی شما',
   error: 'مشکلی پیش آمد. لطفاً دوباره تلاش کنید.',
   wrongNetwork: 'شبکه اشتباه است. کیف پول را به {network} تغییر دهید و دوباره تلاش کنید.',
   paymentLabel: 'پرداخت',

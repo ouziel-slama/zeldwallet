@@ -194,6 +194,18 @@ export class ZeldWalletUI extends BaseElement {
     const snapshot = this.snapshot ?? this.controller.getSnapshot();
     const { state, strings, dir, network, showBackupWarning, showPasswordWarning, readyWithSecurity } = snapshot;
 
+    // Preserve focus before re-rendering
+    const activeElement = this.shadowRootRef.activeElement as HTMLElement | null;
+    const focusedSelector = activeElement?.hasAttribute('data-hunting-address')
+      ? '[data-hunting-address]'
+      : activeElement?.hasAttribute('data-hunting-amount')
+        ? '[data-hunting-amount]'
+        : activeElement?.hasAttribute('data-fee-custom-rate')
+          ? '[data-fee-custom-rate]'
+          : null;
+    const selectionStart = (activeElement as HTMLInputElement | null)?.selectionStart ?? null;
+    const selectionEnd = (activeElement as HTMLInputElement | null)?.selectionEnd ?? null;
+
     this.shadowRootRef.innerHTML = buildTemplate({
       state,
       network,
@@ -203,6 +215,22 @@ export class ZeldWalletUI extends BaseElement {
       showBackupWarning,
       readyWithSecurity,
     });
+
+    // Restore focus after re-rendering
+    if (focusedSelector) {
+      const newElement = this.shadowRootRef.querySelector<HTMLInputElement>(focusedSelector);
+      if (newElement) {
+        newElement.focus();
+        // Restore cursor position
+        if (selectionStart !== null && selectionEnd !== null) {
+          try {
+            newElement.setSelectionRange(selectionStart, selectionEnd);
+          } catch {
+            // Some input types don't support setSelectionRange
+          }
+        }
+      }
+    }
 
     bindPasswordVisibility(this.shadowRootRef, strings);
     bindWalletSwitcher(this.shadowRootRef, {
@@ -233,6 +261,9 @@ export class ZeldWalletUI extends BaseElement {
         onSendZeldChange: (checked) => this.controller.setHuntingSendZeld(checked),
         onZeroCountChange: (value) => this.controller.setHuntingZeroCount(value),
         onUseGpuChange: (checked) => this.controller.setHuntingUseGpu(checked),
+        onFeeModeChange: (mode) => this.controller.setHuntingFeeMode(mode as import('./state').FeeMode),
+        onCustomFeeRateChange: (value) => this.controller.setHuntingCustomFeeRate(value),
+        onFeeToggle: () => this.controller.toggleHuntingFeeExpanded(),
         onAddressChange: (value) => this.controller.setHuntingAddress(value),
         onAmountChange: (value) => this.controller.setHuntingAmount(value),
         onHunt: () => this.controller.startHunting(),
@@ -241,6 +272,8 @@ export class ZeldWalletUI extends BaseElement {
         onMiningSign: () => this.controller.signAndBroadcast(),
         onMiningCancel: () => this.controller.cancelMining(),
         onMiningRetry: () => this.controller.retryMining(),
+        onConfirmTransaction: () => this.controller.confirmTransaction(),
+        onCancelConfirmation: () => this.controller.cancelConfirmation(),
       });
     }
   }

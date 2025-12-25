@@ -34,7 +34,7 @@ export const vi: LocaleStringsInput = {
   showPassword: 'Hiện mật khẩu',
   hidePassword: 'Ẩn mật khẩu',
   ready: 'Ví đã sẵn sàng',
-  readyHint: 'Ví của bạn đã sẵn sàng! Đây là các địa chỉ của bạn:',
+  readyHint: 'Địa chỉ và số dư của bạn',
   error: 'Đã xảy ra lỗi. Vui lòng thử lại.',
   wrongNetwork: 'Sai mạng. Chuyển ví sang {network} và thử lại.',
   paymentLabel: 'Thanh toán',

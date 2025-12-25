@@ -34,7 +34,7 @@ export const pt: LocaleStringsInput = {
   showPassword: 'Mostrar senha',
   hidePassword: 'Ocultar senha',
   ready: 'Carteira pronta',
-  readyHint: 'Sua carteira está pronta! Aqui estão seus endereços:',
+  readyHint: 'Seus endereços e saldos',
   error: 'Algo deu errado. Por favor, tente novamente.',
   wrongNetwork: 'Rede incorreta. Mude a carteira para {network} e tente novamente.',
   paymentLabel: 'Pagamento',

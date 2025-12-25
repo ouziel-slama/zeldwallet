@@ -34,7 +34,7 @@ export const nl: LocaleStringsInput = {
   showPassword: 'Wachtwoord tonen',
   hidePassword: 'Wachtwoord verbergen',
   ready: 'Portemonnee is klaar',
-  readyHint: 'Je portemonnee is klaar! Hier zijn je adressen:',
+  readyHint: 'Je adressen en saldi',
   error: 'Er is iets misgegaan. Probeer het opnieuw.',
   wrongNetwork: 'Verkeerd netwerk. Schakel de portemonnee naar {network} en probeer opnieuw.',
   paymentLabel: 'Betaling',

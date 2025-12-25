@@ -34,7 +34,7 @@ export const ja: LocaleStringsInput = {
   showPassword: 'パスワードを表示',
   hidePassword: 'パスワードを非表示',
   ready: 'ウォレットの準備完了',
-  readyHint: 'ウォレットの準備ができました！アドレスはこちらです：',
+  readyHint: 'あなたのアドレスと残高',
   error: '問題が発生しました。もう一度お試しください。',
   wrongNetwork: 'ネットワークが違います。ウォレットを{network}に切り替えて再試行してください。',
   paymentLabel: '支払い',

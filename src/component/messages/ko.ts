@@ -34,7 +34,7 @@ export const ko: LocaleStringsInput = {
   showPassword: '비밀번호 표시',
   hidePassword: '비밀번호 숨기기',
   ready: '지갑 준비 완료',
-  readyHint: '지갑이 준비되었습니다! 주소는 다음과 같습니다:',
+  readyHint: '주소 및 잔액',
   error: '문제가 발생했습니다. 다시 시도해 주세요.',
   wrongNetwork: '잘못된 네트워크입니다. 지갑을 {network}(으)로 전환하고 다시 시도하세요.',
   paymentLabel: '결제',

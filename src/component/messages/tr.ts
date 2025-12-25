@@ -34,7 +34,7 @@ export const tr: LocaleStringsInput = {
   showPassword: 'Şifreyi göster',
   hidePassword: 'Şifreyi gizle',
   ready: 'Cüzdan hazır',
-  readyHint: 'Cüzdanınız hazır! İşte adresleriniz:',
+  readyHint: 'Adresleriniz ve bakiyeleriniz',
   error: 'Bir şeyler yanlış gitti. Lütfen tekrar deneyin.',
   wrongNetwork: 'Yanlış ağ. Cüzdanı {network} ağına geçirin ve tekrar deneyin.',
   paymentLabel: 'Ödeme',

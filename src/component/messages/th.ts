@@ -34,7 +34,7 @@ export const th: LocaleStringsInput = {
   showPassword: 'แสดงรหัสผ่าน',
   hidePassword: 'ซ่อนรหัสผ่าน',
   ready: 'กระเป๋าเงินพร้อมแล้ว',
-  readyHint: 'กระเป๋าเงินของคุณพร้อมแล้ว! นี่คือที่อยู่ของคุณ:',
+  readyHint: 'ที่อยู่และยอดเงินของคุณ',
   error: 'เกิดข้อผิดพลาด กรุณาลองอีกครั้ง',
   wrongNetwork: 'เครือข่ายผิด สลับกระเป๋าเงินไปที่ {network} แล้วลองอีกครั้ง',
   paymentLabel: 'การชำระเงิน',

@@ -34,7 +34,7 @@ export const id: LocaleStringsInput = {
   showPassword: 'Tampilkan kata sandi',
   hidePassword: 'Sembunyikan kata sandi',
   ready: 'Dompet siap',
-  readyHint: 'Dompet Anda siap! Berikut alamat Anda:',
+  readyHint: 'Alamat dan saldo Anda',
   error: 'Terjadi kesalahan. Silakan coba lagi.',
   wrongNetwork: 'Jaringan salah. Ubah dompet ke {network} dan coba lagi.',
   paymentLabel: 'Pembayaran',

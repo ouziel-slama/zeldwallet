@@ -34,7 +34,7 @@ export const de: LocaleStringsInput = {
   showPassword: 'Passwort anzeigen',
   hidePassword: 'Passwort verbergen',
   ready: 'Wallet ist bereit',
-  readyHint: 'Ihr Wallet ist bereit! Hier sind Ihre Adressen:',
+  readyHint: 'Ihre Adressen und Guthaben',
   error: 'Etwas ist schiefgelaufen. Bitte versuchen Sie es erneut.',
   wrongNetwork: 'Falsches Netzwerk. Wechseln Sie das Wallet zu {network} und versuchen Sie es erneut.',
   paymentLabel: 'Zahlung',

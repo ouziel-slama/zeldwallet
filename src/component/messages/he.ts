@@ -34,7 +34,7 @@ export const he: LocaleStringsInput = {
   showPassword: 'הצג סיסמה',
   hidePassword: 'הסתר סיסמה',
   ready: 'הארנק מוכן',
-  readyHint: 'הארנק שלך מוכן! הנה הכתובות שלך:',
+  readyHint: 'הכתובות והיתרות שלך',
   error: 'משהו השתבש. אנא נסה שוב.',
   wrongNetwork: 'רשת שגויה. העבר את הארנק ל-{network} ונסה שוב.',
   paymentLabel: 'תשלום',

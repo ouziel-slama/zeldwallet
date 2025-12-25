@@ -34,7 +34,7 @@ export const es: LocaleStringsInput = {
   showPassword: 'Mostrar contraseña',
   hidePassword: 'Ocultar contraseña',
   ready: 'Billetera lista',
-  readyHint: '¡Tu billetera está lista! Aquí están tus direcciones:',
+  readyHint: 'Tus direcciones y saldos',
   error: 'Algo salió mal. Por favor, inténtalo de nuevo.',
   wrongNetwork: 'Red incorrecta. Cambia la billetera a {network} e inténtalo de nuevo.',
   paymentLabel: 'Pago',

@@ -34,7 +34,7 @@ export const ar: LocaleStringsInput = {
   showPassword: 'إظهار كلمة المرور',
   hidePassword: 'إخفاء كلمة المرور',
   ready: 'المحفظة جاهزة',
-  readyHint: 'محفظتك جاهزة! إليك عناوينك:',
+  readyHint: 'عناوينك وأرصدتك',
   error: 'حدث خطأ ما. يرجى المحاولة مرة أخرى.',
   wrongNetwork: 'شبكة خاطئة. قم بتبديل المحفظة إلى {network} وحاول مرة أخرى.',
   paymentLabel: 'الدفع',

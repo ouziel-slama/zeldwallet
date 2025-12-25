@@ -338,8 +338,10 @@ export function prepareZeldSendHunt(
   ];
 
   // Calculate Zeld distribution
+  // Distribution must have one entry per output (non-OP_RETURN):
+  // [ordinalsAddress (Zeld change), zeldRecipient, paymentAddress (BTC change = 0 Zeld)]
   const changeZeld = BigInt(totalZeldSelected) - BigInt(zeldOutput.amount);
-  const distribution: bigint[] = [changeZeld, BigInt(zeldOutput.amount)];
+  const distribution: bigint[] = [changeZeld, BigInt(zeldOutput.amount), 0n];
 
   return {
     inputs,

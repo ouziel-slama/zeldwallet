@@ -43,25 +43,26 @@ export const bindCopyButtons = (shadowRoot: ShadowRoot, strings: Strings): void 
       try {
         await navigator.clipboard.writeText(value);
         const isIconButton = button.classList.contains('zeldwallet-copy-icon');
-        const original = button.innerHTML;
+        const originalHtml = button.innerHTML;
         const originalTooltip = button.getAttribute('data-tooltip');
         if (isIconButton) {
           button.innerHTML = COPIED_ICON;
           button.classList.add('zeldwallet-copied');
           button.setAttribute('data-tooltip', strings.copied);
         } else {
-          button.textContent = strings.copied;
+          // For buttons with icon + text, replace the text content but keep structure
+          button.innerHTML = `${COPIED_ICON} ${strings.copied}`;
         }
         button.disabled = true;
         setTimeout(() => {
           if (isIconButton) {
-            button.innerHTML = original || COPY_ICON;
+            button.innerHTML = originalHtml || COPY_ICON;
             button.classList.remove('zeldwallet-copied');
             if (originalTooltip) {
               button.setAttribute('data-tooltip', originalTooltip);
             }
           } else {
-            button.textContent = original || strings.copy;
+            button.innerHTML = originalHtml;
           }
           button.disabled = false;
         }, 1000);
@@ -210,6 +211,9 @@ type HuntingHandlers = {
   onSendZeldChange: (checked: boolean) => void;
   onZeroCountChange: (value: number) => void;
   onUseGpuChange: (checked: boolean) => void;
+  onFeeModeChange: (mode: string) => void;
+  onCustomFeeRateChange: (value: string) => void;
+  onFeeToggle: () => void;
   onAddressChange: (value: string) => void;
   onAmountChange: (value: string) => void;
   onHunt: () => void;
@@ -218,6 +222,8 @@ type HuntingHandlers = {
   onMiningSign: () => void;
   onMiningCancel: () => void;
   onMiningRetry: () => void;
+  onConfirmTransaction: () => void;
+  onCancelConfirmation: () => void;
 };
 
 export const bindHunting = (shadowRoot: ShadowRoot, handlers: HuntingHandlers): void => {
@@ -251,6 +257,64 @@ export const bindHunting = (shadowRoot: ShadowRoot, handlers: HuntingHandlers): 
     useGpuCheckbox.addEventListener('change', () => {
       handlers.onUseGpuChange(useGpuCheckbox.checked);
     });
+  }
+
+  // Fee mode buttons
+  const feeModeButtons = Array.from(shadowRoot.querySelectorAll<HTMLButtonElement>('[data-fee-mode]'));
+  for (const button of feeModeButtons) {
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      const mode = button.getAttribute('data-fee-mode');
+      if (mode) {
+        handlers.onFeeModeChange(mode);
+      }
+    });
+  }
+
+  // Custom fee rate input
+  const customFeeInput = shadowRoot.querySelector<HTMLInputElement>('[data-fee-custom-rate]');
+  if (customFeeInput) {
+    customFeeInput.addEventListener('input', () => {
+      handlers.onCustomFeeRateChange(customFeeInput.value);
+    });
+  }
+
+  // Fee toggle button
+  const feeToggle = shadowRoot.querySelector<HTMLButtonElement>('[data-fee-toggle]');
+  if (feeToggle) {
+    feeToggle.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation(); // Prevent the click-outside handler from firing
+      handlers.onFeeToggle();
+    });
+  }
+
+  // Close fee selector when clicking outside
+  const feeSelector = shadowRoot.querySelector<HTMLElement>('.zeldwallet-fee-selector');
+  if (feeSelector && !(shadowRoot as any)._zeldFeeClickOutsideBound) {
+    const handleClickOutside = (event: Event): void => {
+      const currentFeeSelector = shadowRoot.querySelector<HTMLElement>('.zeldwallet-fee-selector');
+      if (!currentFeeSelector) return;
+      
+      // Check if the selector is expanded
+      const isExpanded = currentFeeSelector.classList.contains('expanded');
+      if (!isExpanded) return;
+      
+      // Use composedPath to check if click was inside the fee selector
+      // This works even after DOM re-renders since the path is captured at click time
+      const path = event.composedPath();
+      const clickedInsideFeeSelector = path.some(
+        (el) => el instanceof HTMLElement && el.classList?.contains('zeldwallet-fee-selector')
+      );
+      
+      if (clickedInsideFeeSelector) return;
+      
+      // Click was outside, close the selector
+      handlers.onFeeToggle();
+    };
+    
+    shadowRoot.addEventListener('click', handleClickOutside as EventListener);
+    (shadowRoot as any)._zeldFeeClickOutsideBound = true;
   }
 
   // Address input
@@ -338,6 +402,35 @@ export const bindHunting = (shadowRoot: ShadowRoot, handlers: HuntingHandlers): 
       handlers.onMiningRetry();
     });
   }
-};
 
+  // Confirmation dialog confirm button
+  const confirmButton = shadowRoot.querySelector<HTMLButtonElement>('[data-confirm-confirm]');
+  if (confirmButton) {
+    confirmButton.addEventListener('click', (event) => {
+      event.preventDefault();
+      handlers.onConfirmTransaction();
+    });
+  }
+
+  // Confirmation dialog cancel button
+  const confirmCancelButton = shadowRoot.querySelector<HTMLButtonElement>('[data-confirm-cancel]');
+  if (confirmCancelButton) {
+    confirmCancelButton.addEventListener('click', (event) => {
+      event.preventDefault();
+      handlers.onCancelConfirmation();
+    });
+  }
+
+  // Also allow clicking on the overlay background to cancel
+  const confirmOverlay = shadowRoot.querySelector<HTMLElement>('[data-confirm-overlay]');
+  if (confirmOverlay) {
+    confirmOverlay.addEventListener('click', (event) => {
+      // Only cancel if clicking directly on the overlay (not on the dialog)
+      if (event.target === confirmOverlay) {
+        event.preventDefault();
+        handlers.onCancelConfirmation();
+      }
+    });
+  }
+};
 

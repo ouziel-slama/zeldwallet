@@ -34,7 +34,7 @@ export const hi: LocaleStringsInput = {
   showPassword: 'पासवर्ड दिखाएं',
   hidePassword: 'पासवर्ड छुपाएं',
   ready: 'वॉलेट तैयार है',
-  readyHint: 'आपका वॉलेट तैयार है! यहाँ आपके पते हैं:',
+  readyHint: 'आपके पते और शेष राशि',
   error: 'कुछ गलत हो गया। कृपया पुनः प्रयास करें।',
   wrongNetwork: 'गलत नेटवर्क। वॉलेट को {network} पर स्विच करें और पुनः प्रयास करें।',
   paymentLabel: 'भुगतान',

@@ -34,7 +34,7 @@ export const uk: LocaleStringsInput = {
   showPassword: 'Показати пароль',
   hidePassword: 'Приховати пароль',
   ready: 'Гаманець готовий',
-  readyHint: 'Ваш гаманець готовий! Ось ваші адреси:',
+  readyHint: 'Ваші адреси та баланси',
   error: 'Щось пішло не так. Будь ласка, спробуйте ще раз.',
   wrongNetwork: 'Неправильна мережа. Переключіть гаманець на {network} і спробуйте ще раз.',
   paymentLabel: 'Платіж',

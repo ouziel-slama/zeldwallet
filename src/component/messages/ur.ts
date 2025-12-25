@@ -34,7 +34,7 @@ export const ur: LocaleStringsInput = {
   showPassword: 'پاس ورڈ دکھائیں',
   hidePassword: 'پاس ورڈ چھپائیں',
   ready: 'والیٹ تیار ہے',
-  readyHint: 'آپ کا والیٹ تیار ہے! یہ آپ کے ایڈریس ہیں:',
+  readyHint: 'آپ کے ایڈریس اور بیلنس',
   error: 'کچھ غلط ہو گیا۔ براہ کرم دوبارہ کوشش کریں۔',
   wrongNetwork: 'غلط نیٹ ورک۔ والیٹ کو {network} پر سوئچ کریں اور دوبارہ کوشش کریں۔',
   paymentLabel: 'ادائیگی',

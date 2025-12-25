@@ -34,7 +34,7 @@ export const bn: LocaleStringsInput = {
   showPassword: 'পাসওয়ার্ড দেখান',
   hidePassword: 'পাসওয়ার্ড লুকান',
   ready: 'ওয়ালেট প্রস্তুত',
-  readyHint: 'আপনার ওয়ালেট প্রস্তুত! এখানে আপনার ঠিকানাগুলি:',
+  readyHint: 'আপনার ঠিকানা এবং ব্যালেন্স',
   error: 'কিছু ভুল হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।',
   wrongNetwork: 'ভুল নেটওয়ার্ক। ওয়ালেটটি {network} এ সুইচ করুন এবং আবার চেষ্টা করুন।',
   paymentLabel: 'পেমেন্ট',

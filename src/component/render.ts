@@ -4,6 +4,8 @@ import {
   type ActionView,
   type BalanceType,
   type BalanceView,
+  type ConfirmDialogView,
+  type FeeOptionView,
   type HuntingView,
   type InlineWarningView,
   type MiningProgressView,
@@ -392,6 +394,17 @@ const buildMiningProgress = (progress: MiningProgressView): string => {
   `;
 };
 
+/**
+ * Formats a txid by wrapping leading zeros in a gold-colored span.
+ */
+const formatTxidWithGoldZeros = (txid: string): string => {
+  const match = txid.match(/^(0+)/);
+  if (!match) return escapeHtml(txid);
+  const zeros = match[1];
+  const rest = txid.slice(zeros.length);
+  return `<span class="zeldwallet-txid-zeros">${zeros}</span>${escapeHtml(rest)}`;
+};
+
 const buildMiningResult = (result: MiningResultView): string => {
   const signButton = result.showSignButton
     ? `<button class="zeldwallet-mining-broadcast" type="button" data-mining-sign>${BROADCAST_ICON} ${result.signAndBroadcastLabel}</button>`
@@ -401,18 +414,21 @@ const buildMiningResult = (result: MiningResultView): string => {
     ? `<a class="zeldwallet-mining-mempool-link" href="${result.mempoolUrl}" target="_blank" rel="noopener noreferrer">${EXTERNAL_LINK_ICON} ${result.viewOnMempoolLabel}</a>`
     : '';
 
+  const copyPsbtButton = result.psbt
+    ? `<button class="zeldwallet-mining-copy-psbt zeldwallet-copy-icon" type="button" data-copy="${escapeHtml(result.psbt)}" data-tooltip="${result.copyPsbtLabel}">${COPY_ICON}</button>`
+    : '';
+
   return `
     <div class="zeldwallet-mining-result">
       <div class="zeldwallet-mining-congrats">${result.congratsMessage}</div>
       <div class="zeldwallet-mining-txid">
-        <span class="zeldwallet-mining-txid-label">${result.txidLabel}:</span>
-        <span class="zeldwallet-mining-txid-value" title="${result.txid}">${result.txid.slice(0, 8)}...${result.txid.slice(-8)}</span>
-        <button class="zeldwallet-copy zeldwallet-copy-icon" type="button" data-copy="${result.txid}" data-tooltip="Copy">${COPY_ICON}</button>
+        <span class="zeldwallet-mining-txid-value">${formatTxidWithGoldZeros(result.txid)}</span>
       </div>
       <div class="zeldwallet-mining-result-actions">
         ${signButton}
         ${mempoolLink}
         <button class="zeldwallet-mining-cancel" type="button" data-mining-cancel>${CANCEL_ICON} ${result.cancelLabel}</button>
+        ${copyPsbtButton}
       </div>
     </div>
   `;
@@ -424,6 +440,71 @@ const buildMiningError = (error: string, retryLabel: string): string => `
     <button class="zeldwallet-mining-retry" type="button" data-mining-retry>${REFRESH_ICON} ${retryLabel}</button>
   </div>
 `;
+
+const buildConfirmDialog = (dialog: ConfirmDialogView): string => {
+  const inputRows = dialog.inputs
+    .map(
+      (input) => `
+        <div class="zeldwallet-confirm-row">
+          <span class="zeldwallet-confirm-address" title="${escapeHtml(input.address)}">${escapeHtml(input.addressTruncated)}</span>
+          <span class="zeldwallet-confirm-value">${input.valueFormatted} BTC</span>
+        </div>
+      `
+    )
+    .join('');
+
+  const outputRows = dialog.outputs
+    .map(
+      (output) => `
+        <div class="zeldwallet-confirm-row">
+          <span class="zeldwallet-confirm-address" title="${escapeHtml(output.address)}">
+            ${escapeHtml(output.addressTruncated)}
+            ${output.isChange ? `<span class="zeldwallet-confirm-change">${dialog.changeLabel}</span>` : ''}
+          </span>
+          <span class="zeldwallet-confirm-value">${output.valueFormatted} BTC</span>
+        </div>
+      `
+    )
+    .join('');
+
+  return `
+    <div class="zeldwallet-confirm-overlay" data-confirm-overlay>
+      <div class="zeldwallet-confirm-dialog" role="dialog" aria-labelledby="confirm-title">
+        <h3 class="zeldwallet-confirm-title" id="confirm-title">${escapeHtml(dialog.title)}</h3>
+        
+        <div class="zeldwallet-confirm-section">
+          <div class="zeldwallet-confirm-section-header">${escapeHtml(dialog.inputsLabel)}</div>
+          <div class="zeldwallet-confirm-rows">
+            ${inputRows}
+          </div>
+        </div>
+        
+        <div class="zeldwallet-confirm-section">
+          <div class="zeldwallet-confirm-section-header">${escapeHtml(dialog.outputsLabel)}</div>
+          <div class="zeldwallet-confirm-rows">
+            ${outputRows}
+          </div>
+        </div>
+        
+        <div class="zeldwallet-confirm-summary">
+          <div class="zeldwallet-confirm-summary-row">
+            <span class="zeldwallet-confirm-summary-label">${escapeHtml(dialog.feeLabel)}</span>
+            <span class="zeldwallet-confirm-summary-value zeldwallet-confirm-fee">${dialog.feeFormatted} BTC</span>
+          </div>
+        </div>
+        
+        <div class="zeldwallet-confirm-actions">
+          <button class="zeldwallet-confirm-btn zeldwallet-confirm-btn-confirm" type="button" data-confirm-confirm>
+            ${CHECK_ICON} ${escapeHtml(dialog.confirmLabel)}
+          </button>
+          <button class="zeldwallet-confirm-btn zeldwallet-confirm-btn-cancel" type="button" data-confirm-cancel>
+            ${CANCEL_ICON} ${escapeHtml(dialog.cancelLabel)}
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+};
 
 /**
  * Builds the final stats display (read-only, no controls) for showing with the result.
@@ -447,8 +528,64 @@ const buildMiningFinalStats = (progress: MiningProgressView): string => {
   `;
 };
 
+const buildFeeSelector = (hunting: HuntingView): string => {
+  const feeButtons = hunting.feeOptions
+    .map((opt: FeeOptionView) => `
+      <button
+        class="zeldwallet-fee-option${opt.selected ? ' selected' : ''}"
+        type="button"
+        data-fee-mode="${opt.mode}"
+        ${hunting.isMining ? 'disabled' : ''}
+      >
+        <span class="zeldwallet-fee-option-label">${opt.label}</span>
+        ${opt.mode !== 'custom' || opt.rateFormatted !== '—' 
+          ? `<span class="zeldwallet-fee-option-rate">${opt.rateFormatted}<span class="zeldwallet-fee-option-unit"> s/vb</span></span>`
+          : ''
+        }
+      </button>
+    `)
+    .join('');
+
+  const customInput = hunting.showCustomFeeInput && hunting.feeExpanded
+    ? `
+      <input
+        type="text"
+        class="zeldwallet-hunting-input zeldwallet-fee-custom-field"
+        placeholder="${hunting.customFeePlaceholder}"
+        value="${escapeHtml(hunting.customFeeRate)}"
+        data-fee-custom-rate
+        ${hunting.isMining ? 'disabled' : ''}
+      />
+    `
+    : '';
+
+  const expandedContent = hunting.feeExpanded
+    ? `
+      <div class="zeldwallet-fee-dropdown">
+        <div class="zeldwallet-fee-options">
+          ${feeButtons}
+        </div>
+        ${customInput}
+      </div>
+    `
+    : '';
+
+  return `
+    <div class="zeldwallet-fee-selector${hunting.feeExpanded ? ' expanded' : ''}">
+      <button class="zeldwallet-fee-toggle" type="button" data-fee-toggle ${hunting.isMining ? 'disabled' : ''}>
+        <span class="zeldwallet-fee-label">${hunting.feeLabel}</span>
+        <span class="zeldwallet-fee-chevron${hunting.feeExpanded ? ' open' : ''}">${CHEVRON_ICON}</span>
+      </button>
+      ${expandedContent}
+    </div>
+  `;
+};
+
 const buildHuntingBlock = (hunting: HuntingView | undefined): string => {
   if (!hunting || !hunting.visible) return '';
+
+  // Show confirmation dialog if visible
+  const confirmDialogBlock = hunting.confirmDialog ? buildConfirmDialog(hunting.confirmDialog) : '';
 
   // Show mining result if we have one (with final stats)
   if (hunting.miningResult) {
@@ -457,6 +594,7 @@ const buildHuntingBlock = (hunting: HuntingView | undefined): string => {
       <div class="zeldwallet-hunting">
         ${finalStatsBlock}
         ${buildMiningResult(hunting.miningResult)}
+        ${confirmDialogBlock}
       </div>
     `;
   }
@@ -570,6 +708,7 @@ const buildHuntingBlock = (hunting: HuntingView | undefined): string => {
           />
           ${hunting.useGpuLabel}
         </label>
+        ${buildFeeSelector(hunting)}
         ${huntButton}
       </div>
     </div>

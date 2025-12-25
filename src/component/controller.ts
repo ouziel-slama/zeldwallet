@@ -7,7 +7,7 @@ import { fetchBalances, type UtxoResponse } from './balance';
 import { DEFAULT_ELECTRS_URL, DEFAULT_PROVIDER, DEFAULT_ZELDHASH_API_URL, DUST, MIN_FEE_RESERVE } from './constants';
 import { describeError, isPasswordRequiredError, isWrongPasswordError } from './errors';
 import { getDirection, getStrings, resolveLocale, type LocaleKey, type LocaleStrings, type TextDirection } from './i18n';
-import { createInitialHuntingState, createInitialState, type ComponentState } from './state';
+import { createInitialHuntingState, createInitialState, type ComponentState, type FeeMode, type OpReturnData, type ParsedTransaction, type ParsedTxInput, type ParsedTxOutput, type RecommendedFees } from './state';
 import { prepareMinerArgs, type OrdinalsUtxo, type UtxoInfo } from './miner';
 import {
   connectExternalWallet,
@@ -45,8 +45,188 @@ type StoredWalletPreference = { id: SupportedWalletId; network?: NetworkType };
 
 const LAST_WALLET_STORAGE_KEY = 'zeldwallet:lastWallet';
 
-// Default fee rate in sats/vbyte
+// Default fee rate in sats/vbyte (fallback when API is unavailable)
 const DEFAULT_SATS_PER_VBYTE = 12;
+
+// Mempool.space API for recommended fees
+const MEMPOOL_FEES_API = 'https://mempool.space/api/v1/fees/recommended';
+
+/**
+ * OP_RETURN opcode
+ */
+const OP_RETURN = 0x6a;
+
+/**
+ * Decodes a CBOR unsigned integer from a buffer at the given offset.
+ * Returns [value, bytesConsumed] or null if invalid.
+ */
+function decodeCborUint(data: Uint8Array, offset: number): [bigint, number] | null {
+  if (offset >= data.length) return null;
+  
+  const initial = data[offset];
+  const majorType = initial >> 5;
+  
+  // Must be major type 0 (unsigned integer)
+  if (majorType !== 0) return null;
+  
+  const additionalInfo = initial & 0x1f;
+  
+  if (additionalInfo <= 23) {
+    return [BigInt(additionalInfo), 1];
+  } else if (additionalInfo === 24) {
+    if (offset + 1 >= data.length) return null;
+    return [BigInt(data[offset + 1]), 2];
+  } else if (additionalInfo === 25) {
+    if (offset + 2 >= data.length) return null;
+    const value = (data[offset + 1] << 8) | data[offset + 2];
+    return [BigInt(value), 3];
+  } else if (additionalInfo === 26) {
+    if (offset + 4 >= data.length) return null;
+    const value = (data[offset + 1] << 24) | (data[offset + 2] << 16) | (data[offset + 3] << 8) | data[offset + 4];
+    return [BigInt(value >>> 0), 5];
+  } else if (additionalInfo === 27) {
+    if (offset + 8 >= data.length) return null;
+    let value = 0n;
+    for (let i = 0; i < 8; i++) {
+      value = (value << 8n) | BigInt(data[offset + 1 + i]);
+    }
+    return [value, 9];
+  }
+  
+  return null;
+}
+
+/**
+ * Attempts to decode a CBOR array of unsigned integers.
+ * Returns the array of values or null if invalid.
+ */
+function decodeCborArray(data: Uint8Array): bigint[] | null {
+  if (data.length === 0) return null;
+  
+  const initial = data[0];
+  const majorType = initial >> 5;
+  
+  // Must be major type 4 (array)
+  if (majorType !== 4) return null;
+  
+  const additionalInfo = initial & 0x1f;
+  let arrayLen: number;
+  let offset: number;
+  
+  if (additionalInfo <= 23) {
+    arrayLen = additionalInfo;
+    offset = 1;
+  } else if (additionalInfo === 24) {
+    if (data.length < 2) return null;
+    arrayLen = data[1];
+    offset = 2;
+  } else if (additionalInfo === 25) {
+    if (data.length < 3) return null;
+    arrayLen = (data[1] << 8) | data[2];
+    offset = 3;
+  } else {
+    // Larger arrays not expected in practice
+    return null;
+  }
+  
+  const values: bigint[] = [];
+  for (let i = 0; i < arrayLen; i++) {
+    const result = decodeCborUint(data, offset);
+    if (!result) return null;
+    values.push(result[0]);
+    offset += result[1];
+  }
+  
+  // Make sure we consumed exactly all the data
+  if (offset !== data.length) return null;
+  
+  return values;
+}
+
+/**
+ * Decodes a simple big-endian nonce from bytes.
+ */
+function decodeSimpleNonce(data: Uint8Array): bigint {
+  let value = 0n;
+  for (const byte of data) {
+    value = (value << 8n) | BigInt(byte);
+  }
+  return value;
+}
+
+/**
+ * Parses an OP_RETURN script and extracts the data.
+ * Returns OpReturnData or null if not a valid OP_RETURN.
+ */
+function parseOpReturn(script: Buffer): OpReturnData | null {
+  // OP_RETURN scripts: OP_RETURN [OP_PUSHBYTES_N] [data]
+  // Minimum: OP_RETURN (1 byte)
+  if (script.length < 1 || script[0] !== OP_RETURN) {
+    return null;
+  }
+  
+  // Extract the data payload
+  let data: Uint8Array;
+  if (script.length === 1) {
+    // OP_RETURN with no data
+    return { type: 'nonce', nonce: 0n };
+  }
+  
+  const pushOp = script[1];
+  
+  // Handle different push opcodes
+  if (pushOp <= 0x4b) {
+    // OP_PUSHBYTES_0 to OP_PUSHBYTES_75: direct push
+    const dataLen = pushOp;
+    if (script.length < 2 + dataLen) return null;
+    data = new Uint8Array(script.slice(2, 2 + dataLen));
+  } else if (pushOp === 0x4c) {
+    // OP_PUSHDATA1
+    if (script.length < 3) return null;
+    const dataLen = script[2];
+    if (script.length < 3 + dataLen) return null;
+    data = new Uint8Array(script.slice(3, 3 + dataLen));
+  } else if (pushOp === 0x4d) {
+    // OP_PUSHDATA2
+    if (script.length < 4) return null;
+    const dataLen = script[2] | (script[3] << 8);
+    if (script.length < 4 + dataLen) return null;
+    data = new Uint8Array(script.slice(4, 4 + dataLen));
+  } else {
+    return null;
+  }
+  
+  // Check for ZELD magic prefix (0x5a 0x45 0x4c 0x44 = "ZELD")
+  const ZELD_MAGIC = [0x5a, 0x45, 0x4c, 0x44]; // "ZELD"
+  let cborData = data;
+  
+  if (data.length > 4 && 
+      data[0] === ZELD_MAGIC[0] && 
+      data[1] === ZELD_MAGIC[1] && 
+      data[2] === ZELD_MAGIC[2] && 
+      data[3] === ZELD_MAGIC[3]) {
+    // Skip the "ZELD" prefix to get to the CBOR data
+    cborData = data.slice(4);
+  }
+  
+  // Try to decode as CBOR array (ZELD distribution)
+  const cborArray = decodeCborArray(cborData);
+  if (cborArray && cborArray.length >= 2) {
+    // CBOR array with at least 2 elements: distribution amounts + nonce
+    return {
+      type: 'zeld',
+      distribution: cborArray,
+    };
+  }
+  
+  // Otherwise, treat as simple nonce (big-endian encoded)
+  const nonce = decodeSimpleNonce(data);
+  return {
+    type: 'nonce',
+    nonce,
+  };
+}
+
 // GPU batch size for better throughput
 const GPU_BATCH_SIZE = 65_536;
 // CPU batch size
@@ -391,6 +571,8 @@ export class ZeldWalletController {
       this.initialExternalNetwork = session.network;
       this.persistPreferredWallet(walletId, session.network);
       this.startBalanceRefresh();
+      // Fetch recommended fees when wallet is ready
+      void this.fetchRecommendedFees();
     } catch (error) {
       console.error('[controller.connectWallet] Error connecting:', error);
       UnifiedWallet.reset();
@@ -548,6 +730,8 @@ export class ZeldWalletController {
       });
       this.persistPreferredWallet('zeld', this.preferredNetwork);
       this.startBalanceRefresh();
+      // Fetch recommended fees when wallet is ready
+      void this.fetchRecommendedFees();
     } catch (error) {
       this.resetIntegrationState();
       this.setError(error);
@@ -776,6 +960,106 @@ export class ZeldWalletController {
     });
   }
 
+  setHuntingFeeMode(mode: FeeMode): void {
+    const hunting = this.state.hunting ?? createInitialHuntingState();
+    this.setState({
+      hunting: {
+        ...hunting,
+        feeMode: mode,
+      },
+    });
+  }
+
+  setHuntingCustomFeeRate(value: string): void {
+    const hunting = this.state.hunting ?? createInitialHuntingState();
+    this.setState({
+      hunting: {
+        ...hunting,
+        customFeeRate: value,
+      },
+    });
+  }
+
+  toggleHuntingFeeExpanded(): void {
+    const hunting = this.state.hunting ?? createInitialHuntingState();
+    this.setState({
+      hunting: {
+        ...hunting,
+        feeExpanded: !hunting.feeExpanded,
+      },
+    });
+  }
+
+  /**
+   * Gets the current fee rate based on the selected mode.
+   */
+  private getCurrentFeeRate(): number {
+    const hunting = this.state.hunting;
+    if (!hunting) return DEFAULT_SATS_PER_VBYTE;
+
+    const { feeMode, customFeeRate, recommendedFees } = hunting;
+
+    if (feeMode === 'custom') {
+      const parsed = parseFloat(customFeeRate.trim());
+      if (Number.isFinite(parsed) && parsed > 0) {
+        return Math.round(parsed);
+      }
+      return DEFAULT_SATS_PER_VBYTE;
+    }
+
+    if (recommendedFees) {
+      switch (feeMode) {
+        case 'slow':
+          return recommendedFees.slow;
+        case 'fast':
+          return recommendedFees.fast;
+        case 'medium':
+        default:
+          return recommendedFees.medium;
+      }
+    }
+
+    return DEFAULT_SATS_PER_VBYTE;
+  }
+
+  /**
+   * Fetches recommended fees from mempool.space API.
+   */
+  async fetchRecommendedFees(): Promise<void> {
+    this.setHuntingState({ feeLoading: true, feeError: undefined });
+
+    try {
+      const response = await fetch(MEMPOOL_FEES_API);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      const data = await response.json();
+      // mempool.space returns: { fastestFee, halfHourFee, hourFee, economyFee, minimumFee }
+      const recommendedFees: RecommendedFees = {
+        slow: data.hourFee ?? data.economyFee ?? DEFAULT_SATS_PER_VBYTE,
+        medium: data.halfHourFee ?? DEFAULT_SATS_PER_VBYTE,
+        fast: data.fastestFee ?? DEFAULT_SATS_PER_VBYTE,
+      };
+      this.setHuntingState({
+        recommendedFees,
+        feeLoading: false,
+        feeError: undefined,
+      });
+    } catch (error) {
+      console.warn('[ZeldWalletController] Failed to fetch recommended fees:', error);
+      // Set default fallback fees
+      this.setHuntingState({
+        recommendedFees: {
+          slow: Math.round(DEFAULT_SATS_PER_VBYTE * 0.5),
+          medium: DEFAULT_SATS_PER_VBYTE,
+          fast: Math.round(DEFAULT_SATS_PER_VBYTE * 2),
+        },
+        feeLoading: false,
+        feeError: error instanceof Error ? error.message : 'Failed to fetch fees',
+      });
+    }
+  }
+
   setHuntingAddress(value: string): void {
     const hunting = this.state.hunting ?? createInitialHuntingState();
     const network = this.getSnapshot().network;
@@ -936,12 +1220,13 @@ export class ZeldWalletController {
 
       // Create miner instance
       const batchSize = hunting.useGpu ? GPU_BATCH_SIZE : CPU_BATCH_SIZE;
+      const feeRate = this.getCurrentFeeRate();
       this.miner = new ZeldMiner({
         network: network === 'mainnet' ? 'mainnet' : 'testnet',
         batchSize,
         useWebGPU: hunting.useGpu,
         workerThreads: Math.max(1, navigator.hardwareConcurrency || 4),
-        satsPerVbyte: DEFAULT_SATS_PER_VBYTE,
+        satsPerVbyte: feeRate,
       });
 
       // Create abort controller
@@ -1077,7 +1362,8 @@ export class ZeldWalletController {
   }
 
   /**
-   * Signs and broadcasts the mined transaction.
+   * Parses the PSBT and shows the confirmation dialog.
+   * The actual signing happens when user confirms.
    */
   async signAndBroadcast(): Promise<void> {
     const hunting = this.state.hunting;
@@ -1086,7 +1372,39 @@ export class ZeldWalletController {
       return;
     }
 
-    this.setHuntingState({ miningStatus: 'signing' });
+    try {
+      // Parse PSBT to extract transaction details for confirmation
+      const parsedTx = this.parsePsbtForConfirmation(hunting.miningResult.psbt);
+      
+      // Show confirmation dialog
+      this.setHuntingState({
+        showConfirmDialog: true,
+        parsedTransaction: parsedTx,
+      });
+    } catch (error) {
+      console.error('[signAndBroadcast] Error parsing PSBT:', error);
+      const strings = getStrings(this.locale);
+      const message = error instanceof Error ? error.message : strings.error;
+      this.setMiningError(message);
+    }
+  }
+
+  /**
+   * Called when user confirms the transaction in the confirmation dialog.
+   */
+  async confirmTransaction(): Promise<void> {
+    const hunting = this.state.hunting;
+    if (!hunting?.miningResult?.psbt) {
+      console.warn('[ZeldWalletController] No PSBT to sign');
+      return;
+    }
+
+    // Hide confirmation dialog and set signing status
+    this.setHuntingState({ 
+      showConfirmDialog: false, 
+      parsedTransaction: undefined,
+      miningStatus: 'signing' 
+    });
 
     try {
       // Parse PSBT to determine inputs and their addresses
@@ -1100,7 +1418,7 @@ export class ZeldWalletController {
       const paymentAddr = addresses.find((a) => a.purpose === 'payment')?.address;
       const ordinalsAddr = addresses.find((a) => a.purpose === 'ordinals')?.address;
       
-      console.log('[signAndBroadcast] Our addresses:', { paymentAddr, ordinalsAddr });
+      console.log('[confirmTransaction] Our addresses:', { paymentAddr, ordinalsAddr });
 
       // Build sign inputs array with addresses extracted from PSBT witness UTXOs
       const signInputs: Array<{ index: number; address: string }> = [];
@@ -1113,7 +1431,7 @@ export class ZeldWalletController {
           try {
             inputAddress = bitcoin.address.fromOutputScript(input.witnessUtxo.script, btcNetwork);
           } catch (err) {
-            console.warn(`[signAndBroadcast] Could not extract address from input ${i}:`, err);
+            console.warn(`[confirmTransaction] Could not extract address from input ${i}:`, err);
           }
         }
 
@@ -1125,9 +1443,9 @@ export class ZeldWalletController {
 
         if (inputAddress) {
           signInputs.push({ index: i, address: inputAddress });
-          console.log(`[signAndBroadcast] Input ${i} belongs to address: ${inputAddress}`);
+          console.log(`[confirmTransaction] Input ${i} belongs to address: ${inputAddress}`);
         } else {
-          console.warn(`[signAndBroadcast] Could not determine address for input ${i}`);
+          console.warn(`[confirmTransaction] Could not determine address for input ${i}`);
         }
       }
 
@@ -1135,12 +1453,12 @@ export class ZeldWalletController {
         throw new Error('Could not determine addresses for any PSBT inputs');
       }
 
-      console.log('[signAndBroadcast] Signing PSBT with inputs:', signInputs);
+      console.log('[confirmTransaction] Signing PSBT with inputs:', signInputs);
 
       // Sign the PSBT using UnifiedWallet
       const signedPsbt = await UnifiedWallet.signPsbt(hunting.miningResult.psbt, signInputs);
       
-      console.log('[signAndBroadcast] PSBT signed successfully');
+      console.log('[confirmTransaction] PSBT signed successfully');
       
       // Extract the transaction from the signed PSBT and broadcast
       const txHex = this.finalizePsbt(signedPsbt);
@@ -1154,7 +1472,7 @@ export class ZeldWalletController {
       // Refresh balances after broadcast
       void this.refreshBalances();
     } catch (error) {
-      console.error('[signAndBroadcast] Error:', error);
+      console.error('[confirmTransaction] Error:', error);
       
       // Check if user cancelled the signing - in that case, go back to 'found' state
       // so they can try again without losing their mined result
@@ -1169,7 +1487,7 @@ export class ZeldWalletController {
         errorMessage.toLowerCase().includes('denied');
       
       if (isUserCancelled) {
-        console.log('[signAndBroadcast] User cancelled signing, returning to found state');
+        console.log('[confirmTransaction] User cancelled signing, returning to found state');
         this.setHuntingState({ miningStatus: 'found' });
       } else {
         const strings = getStrings(this.locale);
@@ -1177,6 +1495,100 @@ export class ZeldWalletController {
         this.setMiningError(message);
       }
     }
+  }
+
+  /**
+   * Called when user cancels the confirmation dialog.
+   */
+  cancelConfirmation(): void {
+    this.setHuntingState({
+      showConfirmDialog: false,
+      parsedTransaction: undefined,
+    });
+  }
+
+  /**
+   * Parses a PSBT and extracts inputs/outputs for the confirmation dialog.
+   */
+  private parsePsbtForConfirmation(psbtBase64: string): ParsedTransaction {
+    const network = this.getSnapshot().network;
+    const btcNetwork = network === 'mainnet' ? bitcoin.networks.bitcoin : bitcoin.networks.testnet;
+    const psbt = bitcoin.Psbt.fromBase64(psbtBase64);
+
+    // Get our addresses to identify change outputs
+    const addresses = this.state.addresses ?? [];
+    const ourAddresses = new Set(addresses.map((a) => a.address).filter(Boolean));
+
+    // Parse inputs
+    const inputs: ParsedTxInput[] = [];
+    let totalInputValue = 0;
+
+    for (let i = 0; i < psbt.data.inputs.length; i++) {
+      const input = psbt.data.inputs[i];
+      const txInput = psbt.txInputs[i];
+      let inputAddress = '';
+      let inputValue = 0;
+
+      // Extract address and value from witnessUtxo
+      if (input.witnessUtxo) {
+        inputValue = input.witnessUtxo.value;
+        try {
+          inputAddress = bitcoin.address.fromOutputScript(input.witnessUtxo.script, btcNetwork);
+        } catch {
+          inputAddress = 'Unknown';
+        }
+      }
+
+      totalInputValue += inputValue;
+      inputs.push({
+        txid: Buffer.from(txInput.hash).reverse().toString('hex'),
+        vout: txInput.index,
+        address: inputAddress,
+        value: inputValue,
+      });
+    }
+
+    // Parse outputs
+    const outputs: ParsedTxOutput[] = [];
+    let totalOutputValue = 0;
+
+    for (const txOutput of psbt.txOutputs) {
+      let outputAddress = '';
+      let opReturn: OpReturnData | undefined;
+      
+      // Check if this is an OP_RETURN output
+      const opReturnData = parseOpReturn(txOutput.script);
+      if (opReturnData) {
+        opReturn = opReturnData;
+        outputAddress = 'OP_RETURN';
+      } else {
+        try {
+          outputAddress = bitcoin.address.fromOutputScript(txOutput.script, btcNetwork);
+        } catch {
+          outputAddress = 'Unknown';
+        }
+      }
+
+      const isChange = ourAddresses.has(outputAddress);
+      totalOutputValue += txOutput.value;
+
+      outputs.push({
+        address: outputAddress,
+        value: txOutput.value,
+        isChange,
+        opReturn,
+      });
+    }
+
+    const fee = totalInputValue - totalOutputValue;
+
+    return {
+      inputs,
+      outputs,
+      fee,
+      totalInputValue,
+      totalOutputValue,
+    };
   }
 
   /**

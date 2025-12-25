@@ -88,6 +88,14 @@ export type LocaleStrings = {
   huntingDisabledInvalidAmount: string;
   huntingDisabledInsufficientBtc: string;
   huntingDisabledInsufficientZeld: string;
+  // Fee selection
+  feeLabel: string;
+  feeUnitLabel: string;
+  feeModeSlow: string;
+  feeModeMedium: string;
+  feeModeFast: string;
+  feeModeCustom: string;
+  feeCustomPlaceholder: string;
   // Mining progress
   miningHashRate: string;
   miningAttempts: string;
@@ -104,8 +112,18 @@ export type LocaleStrings = {
   miningTxidLabel: string;
   miningSignAndBroadcast: string;
   miningViewOnMempool: string;
+  miningCopyPsbt: string;
   miningRetry: string;
   miningCancel: string;
+  // Confirmation dialog
+  confirmDialogTitle: string;
+  confirmDialogInputsLabel: string;
+  confirmDialogOutputsLabel: string;
+  confirmDialogFeeLabel: string;
+  confirmDialogTotalLabel: string;
+  confirmDialogConfirm: string;
+  confirmDialogCancel: string;
+  confirmDialogChangeLabel: string;
 };
 
 export type LocaleStringsInput = Partial<LocaleStrings>;

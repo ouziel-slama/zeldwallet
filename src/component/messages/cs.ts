@@ -34,7 +34,7 @@ export const cs: LocaleStringsInput = {
   showPassword: 'Zobrazit heslo',
   hidePassword: 'Skrýt heslo',
   ready: 'Peněženka je připravena',
-  readyHint: 'Vaše peněženka je připravena! Zde jsou vaše adresy:',
+  readyHint: 'Vaše adresy a zůstatky',
   error: 'Něco se pokazilo. Zkuste to prosím znovu.',
   wrongNetwork: 'Nesprávná síť. Přepněte peněženku na {network} a zkuste to znovu.',
   paymentLabel: 'Platba',

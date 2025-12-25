@@ -34,7 +34,7 @@ export const it: LocaleStringsInput = {
   showPassword: 'Mostra password',
   hidePassword: 'Nascondi password',
   ready: 'Portafoglio pronto',
-  readyHint: 'Il tuo portafoglio è pronto! Ecco i tuoi indirizzi:',
+  readyHint: 'I tuoi indirizzi e saldi',
   error: 'Qualcosa è andato storto. Riprova.',
   wrongNetwork: 'Rete errata. Passa il portafoglio a {network} e riprova.',
   paymentLabel: 'Pagamento',

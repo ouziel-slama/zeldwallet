@@ -34,7 +34,7 @@ export const ru: LocaleStringsInput = {
   showPassword: 'Показать пароль',
   hidePassword: 'Скрыть пароль',
   ready: 'Кошелёк готов',
-  readyHint: 'Ваш кошелёк готов! Вот ваши адреса:',
+  readyHint: 'Ваши адреса и балансы',
   error: 'Что-то пошло не так. Пожалуйста, попробуйте снова.',
   wrongNetwork: 'Неверная сеть. Переключите кошелёк на {network} и попробуйте снова.',
   paymentLabel: 'Платёж',

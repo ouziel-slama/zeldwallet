@@ -34,7 +34,7 @@ export const pl: LocaleStringsInput = {
   showPassword: 'Pokaż hasło',
   hidePassword: 'Ukryj hasło',
   ready: 'Portfel jest gotowy',
-  readyHint: 'Twój portfel jest gotowy! Oto Twoje adresy:',
+  readyHint: 'Twoje adresy i salda',
   error: 'Coś poszło nie tak. Spróbuj ponownie.',
   wrongNetwork: 'Nieprawidłowa sieć. Przełącz portfel na {network} i spróbuj ponownie.',
   paymentLabel: 'Płatność',

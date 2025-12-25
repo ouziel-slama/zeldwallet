@@ -34,7 +34,7 @@ export const tl: LocaleStringsInput = {
   showPassword: 'Ipakita ang password',
   hidePassword: 'Itago ang password',
   ready: 'Handa na ang wallet',
-  readyHint: 'Handa na ang iyong wallet! Narito ang iyong mga address:',
+  readyHint: 'Ang iyong mga address at balanse',
   error: 'May nangyaring mali. Pakisubukang muli.',
   wrongNetwork: 'Maling network. Ilipat ang wallet sa {network} at subukang muli.',
   paymentLabel: 'Bayad',

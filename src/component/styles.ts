@@ -5,6 +5,7 @@ export const componentStyles = `
     color: #0f172a;
   }
   .zeldwallet-card {
+    position: relative;
     border: 1px solid #e5e7eb;
     border-radius: 12px;
     padding: 16px;
@@ -1091,6 +1092,178 @@ export const componentStyles = `
     box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.15);
   }
 
+  /* Fee selector - collapsible */
+  .zeldwallet-fee-selector {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    margin-left: auto;
+  }
+  .zeldwallet-fee-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    font-size: 13px;
+    font-weight: 500;
+    color: #0f172a;
+    cursor: pointer;
+    line-height: 1;
+  }
+  .zeldwallet-fee-toggle:hover:not(:disabled) {
+    color: #f7931a;
+  }
+  .zeldwallet-fee-toggle:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .zeldwallet-fee-label {
+    font-weight: 500;
+    color: #0f172a;
+  }
+  .zeldwallet-fee-chevron {
+    display: inline-flex;
+    width: 12px;
+    height: 12px;
+    color: #0f172a;
+    transition: transform 0.15s ease;
+  }
+  .zeldwallet-fee-chevron.open {
+    transform: rotate(180deg);
+  }
+  .zeldwallet-fee-chevron svg {
+    width: 100%;
+    height: 100%;
+  }
+  .zeldwallet-fee-toggle:hover:not(:disabled) .zeldwallet-fee-label,
+  .zeldwallet-fee-toggle:hover:not(:disabled) .zeldwallet-fee-chevron {
+    color: #f7931a;
+  }
+  .zeldwallet-fee-dropdown {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    z-index: 50;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    min-width: 200px;
+  }
+  .zeldwallet-fee-options {
+    display: flex;
+    gap: 4px;
+    flex-wrap: nowrap;
+  }
+  .zeldwallet-fee-option {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1px;
+    padding: 4px 6px;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    background: #f8fafc;
+    color: #0f172a;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    flex: 1 1 0;
+    min-width: 0;
+  }
+  .zeldwallet-fee-option:hover:not(:disabled) {
+    border-color: #f7931a;
+    background: #fff7ed;
+  }
+  .zeldwallet-fee-option.selected {
+    border-color: #f7931a;
+    background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%);
+    color: #ea580c;
+  }
+  .zeldwallet-fee-option:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .zeldwallet-fee-option-label {
+    font-weight: 600;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.2px;
+  }
+  .zeldwallet-fee-option-rate {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 12px;
+    font-weight: 700;
+    color: #f7931a;
+  }
+  .zeldwallet-fee-option.selected .zeldwallet-fee-option-rate {
+    color: #ea580c;
+  }
+  .zeldwallet-fee-option-unit {
+    color: #64748b;
+    font-weight: 400;
+    font-size: 10px;
+  }
+  .zeldwallet-fee-custom-field {
+    width: 100%;
+    text-align: center;
+    padding: 4px 8px;
+    font-size: 11px;
+    border-radius: 4px;
+    margin-top: 6px;
+    box-sizing: border-box;
+  }
+
+  /* Dark mode fee selector */
+  :host(.dark-card) .zeldwallet-fee-toggle {
+    color: #e8e6e3;
+  }
+  :host(.dark-card) .zeldwallet-fee-toggle:hover:not(:disabled) {
+    color: #d4af37;
+  }
+  :host(.dark-card) .zeldwallet-fee-label {
+    color: #e8e6e3;
+  }
+  :host(.dark-card) .zeldwallet-fee-chevron {
+    color: #e8e6e3;
+  }
+  :host(.dark-card) .zeldwallet-fee-toggle:hover:not(:disabled) .zeldwallet-fee-label,
+  :host(.dark-card) .zeldwallet-fee-toggle:hover:not(:disabled) .zeldwallet-fee-chevron {
+    color: #d4af37;
+  }
+  :host(.dark-card) .zeldwallet-fee-dropdown {
+    background: #12121a;
+    border-color: #2d2d3a;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  }
+  :host(.dark-card) .zeldwallet-fee-option {
+    background: #1a1a24;
+    border-color: #2d2d3a;
+    color: #e8e6e3;
+  }
+  :host(.dark-card) .zeldwallet-fee-option:hover:not(:disabled) {
+    border-color: #d4af37;
+    background: rgba(212, 175, 55, 0.1);
+  }
+  :host(.dark-card) .zeldwallet-fee-option.selected {
+    border-color: #d4af37;
+    background: linear-gradient(135deg, rgba(212, 175, 55, 0.15) 0%, rgba(212, 175, 55, 0.1) 100%);
+    color: #d4af37;
+  }
+  :host(.dark-card) .zeldwallet-fee-option-rate {
+    color: #d4af37;
+  }
+  :host(.dark-card) .zeldwallet-fee-option.selected .zeldwallet-fee-option-rate {
+    color: #e8c454;
+  }
+  :host(.dark-card) .zeldwallet-fee-option-unit {
+    color: #e8e6e3;
+  }
+
   /* Mining Progress */
   .zeldwallet-mining-progress {
     display: flex;
@@ -1174,9 +1347,7 @@ export const componentStyles = `
     flex-direction: column;
     gap: 12px;
     padding: 16px;
-    background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
     border-radius: 8px;
-    border: 1px solid #a7f3d0;
   }
 
   .zeldwallet-mining-congrats {
@@ -1190,22 +1361,20 @@ export const componentStyles = `
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
-    flex-wrap: wrap;
-  }
-
-  .zeldwallet-mining-txid-label {
-    font-size: 12px;
-    color: #6b7280;
+    margin: 12px 0;
   }
 
   .zeldwallet-mining-txid-value {
-    font-size: 13px;
+    font-size: 14px;
     font-family: monospace;
     color: #1f2937;
-    background: rgba(255, 255, 255, 0.5);
-    padding: 4px 8px;
-    border-radius: 4px;
+    word-break: break-all;
+    text-align: center;
+  }
+
+  .zeldwallet-txid-zeros {
+    color: #d4af37;
+    font-weight: 600;
   }
 
   .zeldwallet-mining-result-actions {
@@ -1254,6 +1423,24 @@ export const componentStyles = `
   .zeldwallet-mining-mempool-link:hover {
     background: #ecfdf5;
     border-color: #059669;
+  }
+
+  .zeldwallet-mining-copy-psbt {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 8px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    background: #fff;
+    color: #6b7280;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .zeldwallet-mining-copy-psbt:hover {
+    background: #f3f4f6;
+    border-color: #9ca3af;
   }
 
   .zeldwallet-mining-cancel {
@@ -1342,22 +1529,16 @@ export const componentStyles = `
     border-color: #3d3d4a;
   }
 
-  :host(.dark-card) .zeldwallet-mining-result {
-    background: linear-gradient(135deg, #0d3320 0%, #064e25 100%);
-    border-color: #059669;
-  }
-
   :host(.dark-card) .zeldwallet-mining-congrats {
     color: #6ee7b7;
   }
 
-  :host(.dark-card) .zeldwallet-mining-txid-label {
-    color: #9ca3af;
+  :host(.dark-card) .zeldwallet-mining-txid-value {
+    color: #e8e6e3;
   }
 
-  :host(.dark-card) .zeldwallet-mining-txid-value {
-    background: rgba(0, 0, 0, 0.3);
-    color: #e8e6e3;
+  :host(.dark-card) .zeldwallet-txid-zeros {
+    color: #e8c454;
   }
 
   :host(.dark-card) .zeldwallet-mining-broadcast {
@@ -1378,6 +1559,16 @@ export const componentStyles = `
 
   :host(.dark-card) .zeldwallet-mining-mempool-link:hover {
     background: #0d3320;
+  }
+
+  :host(.dark-card) .zeldwallet-mining-copy-psbt {
+    background: #1e1e28;
+    border-color: #2d2d3a;
+    color: #9ca3af;
+  }
+
+  :host(.dark-card) .zeldwallet-mining-copy-psbt:hover {
+    background: #2d2d3a;
   }
 
   :host(.dark-card) .zeldwallet-mining-cancel {
@@ -1407,6 +1598,239 @@ export const componentStyles = `
 
   :host(.dark-card) .zeldwallet-mining-retry:hover {
     background: #3b1212;
+  }
+
+  /* Confirmation Dialog */
+  .zeldwallet-confirm-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.75);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    border-radius: 12px;
+    padding: 16px;
+  }
+
+  .zeldwallet-confirm-dialog {
+    background: #ffffff;
+    border-radius: 12px;
+    padding: 20px;
+    max-width: 100%;
+    width: 100%;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.25);
+    max-height: calc(100% - 32px);
+    overflow-y: auto;
+  }
+
+  .zeldwallet-confirm-title {
+    margin: 0 0 16px 0;
+    font-size: 16px;
+    font-weight: 700;
+    color: #0f172a;
+    text-align: center;
+  }
+
+  .zeldwallet-confirm-section {
+    margin-bottom: 16px;
+  }
+
+  .zeldwallet-confirm-section-header {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #64748b;
+    margin-bottom: 8px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid #e2e8f0;
+  }
+
+  .zeldwallet-confirm-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .zeldwallet-confirm-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 10px;
+    background: #f8fafc;
+    border-radius: 6px;
+    gap: 12px;
+  }
+
+  .zeldwallet-confirm-address {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 12px;
+    color: #334155;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    flex: 1;
+  }
+
+  .zeldwallet-confirm-change {
+    font-size: 10px;
+    font-weight: 500;
+    color: #059669;
+    background: #d1fae5;
+    padding: 2px 6px;
+    border-radius: 4px;
+    flex-shrink: 0;
+  }
+
+  .zeldwallet-confirm-value {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 13px;
+    font-weight: 600;
+    color: #f7931a;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .zeldwallet-confirm-summary {
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 2px solid #e2e8f0;
+  }
+
+  .zeldwallet-confirm-summary-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 0;
+  }
+
+  .zeldwallet-confirm-summary-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: #475569;
+  }
+
+  .zeldwallet-confirm-summary-value {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 14px;
+    font-weight: 700;
+  }
+
+  .zeldwallet-confirm-fee {
+    color: #dc2626;
+  }
+
+  .zeldwallet-confirm-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 20px;
+  }
+
+  .zeldwallet-confirm-btn {
+    flex: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 12px 16px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .zeldwallet-confirm-btn-confirm {
+    background: linear-gradient(135deg, #059669 0%, #047857 100%);
+    border: none;
+    color: #fff;
+  }
+
+  .zeldwallet-confirm-btn-confirm:hover {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    box-shadow: 0 4px 12px rgba(5, 150, 105, 0.3);
+  }
+
+  .zeldwallet-confirm-btn-cancel {
+    background: #fff;
+    border: 1px solid #d1d5db;
+    color: #6b7280;
+  }
+
+  .zeldwallet-confirm-btn-cancel:hover {
+    background: #f3f4f6;
+    border-color: #9ca3af;
+  }
+
+  /* Dark mode confirmation dialog */
+  :host(.dark-card) .zeldwallet-confirm-overlay {
+    background: rgba(10, 10, 15, 0.85);
+  }
+
+  :host(.dark-card) .zeldwallet-confirm-dialog {
+    background: #12121a;
+    border: 1px solid #2d2d3a;
+  }
+
+  :host(.dark-card) .zeldwallet-confirm-title {
+    color: #d4af37;
+  }
+
+  :host(.dark-card) .zeldwallet-confirm-section-header {
+    color: #9ca3af;
+    border-bottom-color: #2d2d3a;
+  }
+
+  :host(.dark-card) .zeldwallet-confirm-row {
+    background: #1a1a24;
+  }
+
+  :host(.dark-card) .zeldwallet-confirm-address {
+    color: #e8e6e3;
+  }
+
+  :host(.dark-card) .zeldwallet-confirm-change {
+    background: #064e25;
+    color: #6ee7b7;
+  }
+
+  :host(.dark-card) .zeldwallet-confirm-value {
+    color: #d4af37;
+  }
+
+  :host(.dark-card) .zeldwallet-confirm-summary {
+    border-top-color: #2d2d3a;
+  }
+
+  :host(.dark-card) .zeldwallet-confirm-summary-label {
+    color: #9ca3af;
+  }
+
+  :host(.dark-card) .zeldwallet-confirm-fee {
+    color: #fca5a5;
+  }
+
+  :host(.dark-card) .zeldwallet-confirm-btn-confirm {
+    background: linear-gradient(135deg, #d4af37 0%, #b8960c 100%);
+    color: #0f0f16;
+  }
+
+  :host(.dark-card) .zeldwallet-confirm-btn-confirm:hover {
+    background: linear-gradient(135deg, #e8c454 0%, #d4af37 100%);
+    box-shadow: 0 4px 12px rgba(212, 175, 55, 0.3);
+  }
+
+  :host(.dark-card) .zeldwallet-confirm-btn-cancel {
+    background: #1e1e28;
+    border-color: #2d2d3a;
+    color: #9ca3af;
+  }
+
+  :host(.dark-card) .zeldwallet-confirm-btn-cancel:hover {
+    background: #2d2d3a;
   }
 `;
 

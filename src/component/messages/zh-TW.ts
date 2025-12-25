@@ -34,7 +34,7 @@ export const zhTW: LocaleStringsInput = {
   showPassword: '顯示密碼',
   hidePassword: '隱藏密碼',
   ready: '錢包已就緒',
-  readyHint: '您的錢包已準備就緒！以下是您的地址：',
+  readyHint: '您的地址和餘額',
   error: '發生問題。請重試。',
   wrongNetwork: '網路錯誤。請將錢包切換到{network}並重試。',
   paymentLabel: '支付',

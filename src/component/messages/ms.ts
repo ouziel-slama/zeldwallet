@@ -34,7 +34,7 @@ export const ms: LocaleStringsInput = {
   showPassword: 'Tunjuk kata laluan',
   hidePassword: 'Sembunyi kata laluan',
   ready: 'Dompet sedia',
-  readyHint: 'Dompet anda sedia! Berikut adalah alamat anda:',
+  readyHint: 'Alamat dan baki anda',
   error: 'Sesuatu tidak kena. Sila cuba lagi.',
   wrongNetwork: 'Rangkaian salah. Tukar dompet ke {network} dan cuba lagi.',
   paymentLabel: 'Pembayaran',

@@ -34,7 +34,7 @@ export const fr: LocaleStringsInput = {
   showPassword: 'Afficher le mot de passe',
   hidePassword: 'Masquer le mot de passe',
   ready: 'Portefeuille prêt',
-  readyHint: 'Votre portefeuille est prêt ! Voici vos adresses :',
+  readyHint: 'Vos adresses et soldes',
   error: 'Une erreur est survenue. Veuillez réessayer.',
   wrongNetwork: 'Mauvais réseau. Passez le portefeuille sur {network} et réessayez.',
   paymentLabel: 'Paiement',

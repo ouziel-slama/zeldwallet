@@ -34,7 +34,7 @@ export const ro: LocaleStringsInput = {
   showPassword: 'Arată parola',
   hidePassword: 'Ascunde parola',
   ready: 'Portofelul este pregătit',
-  readyHint: 'Portofelul tău este pregătit! Iată adresele tale:',
+  readyHint: 'Adresele și soldurile tale',
   error: 'Ceva nu a mers bine. Te rugăm să încerci din nou.',
   wrongNetwork: 'Rețea greșită. Schimbă portofelul pe {network} și încearcă din nou.',
   paymentLabel: 'Plată',

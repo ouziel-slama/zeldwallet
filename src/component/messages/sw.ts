@@ -34,7 +34,7 @@ export const sw: LocaleStringsInput = {
   showPassword: 'Onyesha nenosiri',
   hidePassword: 'Ficha nenosiri',
   ready: 'Mkoba uko tayari',
-  readyHint: 'Mkoba wako uko tayari! Hizi ni anwani zako:',
+  readyHint: 'Anwani na salio lako',
   error: 'Kuna kitu kilichoenda vibaya. Tafadhali jaribu tena.',
   wrongNetwork: 'Mtandao usio sahihi. Badilisha mkoba kwenda {network} na ujaribu tena.',
   paymentLabel: 'Malipo',

@@ -34,7 +34,7 @@ export const zhCN: LocaleStringsInput = {
   showPassword: '显示密码',
   hidePassword: '隐藏密码',
   ready: '钱包已就绪',
-  readyHint: '您的钱包已准备就绪！以下是您的地址：',
+  readyHint: '您的地址和余额',
   error: '出现问题。请重试。',
   wrongNetwork: '网络错误。请将钱包切换到{network}并重试。',
   paymentLabel: '支付',

@@ -483,11 +483,13 @@ describe('prepareZeldSendHunt', () => {
     );
 
     expect(result.distribution).toBeDefined();
-    expect(result.distribution).toHaveLength(2);
+    expect(result.distribution).toHaveLength(3);
     // change_zeld = 350 - 100 = 250
     expect(result.distribution![0]).toBe(BigInt(250_00000000));
     // zeld_output.amount = 100
     expect(result.distribution![1]).toBe(BigInt(100_00000000));
+    // BTC change output receives 0 Zeld
+    expect(result.distribution![2]).toBe(0n);
   });
 
   it('should throw InsufficientFundsError when not enough Zeld', () => {
@@ -628,7 +630,7 @@ describe('prepareMinerArgs', () => {
 
     expect(result.outputs).toHaveLength(3);
     expect(result.distribution).toBeDefined();
-    expect(result.distribution).toHaveLength(2);
+    expect(result.distribution).toHaveLength(3);
   });
 
   it('should prioritize zeldOutput over btcOutput if both provided', () => {
