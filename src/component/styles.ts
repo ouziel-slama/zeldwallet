@@ -907,5 +907,506 @@ export const componentStyles = `
     right: auto;
     transform: translateX(-50%);
   }
+
+  /* Hunting section */
+  .zeldwallet-hunting {
+    margin-top: 8px;
+    padding-top: 12px;
+    border-top: 1px solid #e5e7eb;
+    overflow: visible;
+  }
+  .zeldwallet-hunting-send-fields {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  .zeldwallet-hunting-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .zeldwallet-hunting-checkbox {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    color: #0f172a;
+    cursor: pointer;
+  }
+  .zeldwallet-hunting-checkbox input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: #f7931a;
+    cursor: pointer;
+  }
+  .zeldwallet-hunting-checkbox.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .zeldwallet-hunting-checkbox.disabled input[type="checkbox"] {
+    cursor: not-allowed;
+  }
+  .zeldwallet-hunting-slider {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    color: #0f172a;
+  }
+  .zeldwallet-hunting-slider input[type="range"] {
+    width: 80px;
+    height: 6px;
+    accent-color: #f7931a;
+    cursor: pointer;
+  }
+  .zeldwallet-hunting-slider-value {
+    min-width: 20px;
+    text-align: center;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-weight: 700;
+    color: #f7931a;
+  }
+  .zeldwallet-hunt-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    border: 1px solid #f7931a;
+    background: linear-gradient(135deg, #f7931a 0%, #e67e00 100%);
+    color: #fff;
+    border-radius: 8px;
+    font-weight: 700;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    margin-left: auto;
+  }
+  .zeldwallet-hunt-button:hover:not(:disabled) {
+    background: linear-gradient(135deg, #e67e00 0%, #cc6e00 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(247, 147, 26, 0.3);
+  }
+  .zeldwallet-hunt-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+  }
+  .zeldwallet-hunt-button-wrapper {
+    display: inline-flex;
+    margin-left: auto;
+    cursor: not-allowed;
+    position: relative;
+  }
+  .zeldwallet-hunt-button-wrapper .zeldwallet-hunt-button {
+    margin-left: 0;
+    pointer-events: none;
+  }
+  /* Ensure tooltip on hunt button wrapper is visible and properly positioned */
+  .zeldwallet-hunt-button-wrapper[data-tooltip]::after {
+    white-space: normal;
+    max-width: 220px;
+    text-align: center;
+    z-index: 100;
+    right: 0;
+    left: auto;
+    transform: none;
+  }
+  .zeldwallet-hunt-button-wrapper[data-tooltip]::before {
+    z-index: 100;
+    right: 24px;
+    left: auto;
+    transform: none;
+  }
+  .zeldwallet-hunt-button .zeldwallet-btn-icon {
+    width: 16px;
+    height: 16px;
+  }
+  .zeldwallet-hunting-input {
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 13px;
+    background: #fff;
+    color: #0f172a;
+    min-width: 0;
+  }
+  .zeldwallet-hunting-input::placeholder {
+    color: #94a3b8;
+  }
+  .zeldwallet-hunting-input:focus {
+    outline: none;
+    border-color: #f7931a;
+    box-shadow: 0 0 0 3px rgba(247, 147, 26, 0.1);
+  }
+  .zeldwallet-hunting-input.error {
+    border-color: #ef4444;
+  }
+  .zeldwallet-hunting-error {
+    font-size: 12px;
+    color: #ef4444;
+    margin-top: 4px;
+  }
+
+  /* Dark mode hunting */
+  :host(.dark-card) .zeldwallet-hunting {
+    border-top-color: #1e1e28;
+  }
+  :host(.dark-card) .zeldwallet-hunting-checkbox,
+  :host(.dark-card) .zeldwallet-hunting-slider {
+    color: #e8e6e3;
+  }
+  :host(.dark-card) .zeldwallet-hunting-slider-value {
+    color: #d4af37;
+  }
+  :host(.dark-card) .zeldwallet-hunting-checkbox input[type="checkbox"] {
+    accent-color: #d4af37;
+  }
+  :host(.dark-card) .zeldwallet-hunting-slider input[type="range"] {
+    accent-color: #d4af37;
+  }
+  :host(.dark-card) .zeldwallet-hunt-button {
+    border-color: #d4af37;
+    background: linear-gradient(135deg, #d4af37 0%, #b8960c 100%);
+    color: #0f0f16;
+  }
+  :host(.dark-card) .zeldwallet-hunt-button:hover:not(:disabled) {
+    background: linear-gradient(135deg, #e8c454 0%, #d4af37 100%);
+    box-shadow: 0 4px 12px rgba(212, 175, 55, 0.3);
+  }
+  :host(.dark-card) .zeldwallet-hunting-input {
+    background: #12121a;
+    border-color: #1e1e28;
+    color: #e8e6e3;
+  }
+  :host(.dark-card) .zeldwallet-hunting-input::placeholder {
+    color: #6b7280;
+  }
+  :host(.dark-card) .zeldwallet-hunting-input:focus {
+    border-color: #d4af37;
+    box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.15);
+  }
+
+  /* Mining Progress */
+  .zeldwallet-mining-progress {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 12px;
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border-radius: 8px;
+    animation: zeldwallet-pulse 2s ease-in-out infinite;
+  }
+
+  @keyframes zeldwallet-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.85; }
+  }
+
+  .zeldwallet-mining-stats {
+    display: flex;
+    justify-content: space-around;
+    gap: 8px;
+  }
+
+  .zeldwallet-mining-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+  }
+
+  .zeldwallet-mining-stat-label {
+    font-size: 11px;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .zeldwallet-mining-stat-value {
+    font-size: 16px;
+    font-weight: 600;
+    color: #1f2937;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .zeldwallet-mining-final-stats {
+    display: flex;
+    justify-content: space-around;
+    gap: 8px;
+    padding: 8px 0;
+    margin-bottom: 8px;
+    border-bottom: 1px solid #e5e7eb;
+  }
+
+  .zeldwallet-mining-actions {
+    display: flex;
+    justify-content: center;
+  }
+
+  .zeldwallet-mining-control {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    background: #fff;
+    color: #374151;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .zeldwallet-mining-control:hover {
+    background: #f3f4f6;
+    border-color: #9ca3af;
+  }
+
+  /* Mining Result */
+  .zeldwallet-mining-result {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 16px;
+    background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+    border-radius: 8px;
+    border: 1px solid #a7f3d0;
+  }
+
+  .zeldwallet-mining-congrats {
+    font-size: 14px;
+    font-weight: 600;
+    color: #065f46;
+    text-align: center;
+  }
+
+  .zeldwallet-mining-txid {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .zeldwallet-mining-txid-label {
+    font-size: 12px;
+    color: #6b7280;
+  }
+
+  .zeldwallet-mining-txid-value {
+    font-size: 13px;
+    font-family: monospace;
+    color: #1f2937;
+    background: rgba(255, 255, 255, 0.5);
+    padding: 4px 8px;
+    border-radius: 4px;
+  }
+
+  .zeldwallet-mining-result-actions {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .zeldwallet-mining-broadcast {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 6px;
+    background: linear-gradient(135deg, #059669 0%, #047857 100%);
+    color: #fff;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .zeldwallet-mining-broadcast:hover {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    box-shadow: 0 4px 12px rgba(5, 150, 105, 0.3);
+  }
+
+  .zeldwallet-mining-mempool-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 16px;
+    border: 1px solid #a7f3d0;
+    border-radius: 6px;
+    background: #fff;
+    color: #059669;
+    font-size: 13px;
+    font-weight: 500;
+    text-decoration: none;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .zeldwallet-mining-mempool-link:hover {
+    background: #ecfdf5;
+    border-color: #059669;
+  }
+
+  .zeldwallet-mining-cancel {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    background: #fff;
+    color: #6b7280;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .zeldwallet-mining-cancel:hover {
+    background: #f3f4f6;
+    border-color: #9ca3af;
+  }
+
+  /* Mining Error */
+  .zeldwallet-mining-error {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    padding: 16px;
+    background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+    border-radius: 8px;
+    border: 1px solid #fca5a5;
+  }
+
+  .zeldwallet-mining-error-message {
+    font-size: 13px;
+    color: #991b1b;
+    text-align: center;
+  }
+
+  .zeldwallet-mining-retry {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    border: 1px solid #fca5a5;
+    border-radius: 6px;
+    background: #fff;
+    color: #dc2626;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .zeldwallet-mining-retry:hover {
+    background: #fef2f2;
+    border-color: #dc2626;
+  }
+
+  /* Dark mode mining */
+  :host(.dark-card) .zeldwallet-mining-progress {
+    background: linear-gradient(135deg, #1a1a24 0%, #12121a 100%);
+  }
+
+  :host(.dark-card) .zeldwallet-mining-stat-label {
+    color: #9ca3af;
+  }
+
+  :host(.dark-card) .zeldwallet-mining-stat-value {
+    color: #e8e6e3;
+  }
+
+  :host(.dark-card) .zeldwallet-mining-final-stats {
+    border-bottom-color: #2d2d3a;
+  }
+
+  :host(.dark-card) .zeldwallet-mining-control {
+    background: #1e1e28;
+    border-color: #2d2d3a;
+    color: #e8e6e3;
+  }
+
+  :host(.dark-card) .zeldwallet-mining-control:hover {
+    background: #2d2d3a;
+    border-color: #3d3d4a;
+  }
+
+  :host(.dark-card) .zeldwallet-mining-result {
+    background: linear-gradient(135deg, #0d3320 0%, #064e25 100%);
+    border-color: #059669;
+  }
+
+  :host(.dark-card) .zeldwallet-mining-congrats {
+    color: #6ee7b7;
+  }
+
+  :host(.dark-card) .zeldwallet-mining-txid-label {
+    color: #9ca3af;
+  }
+
+  :host(.dark-card) .zeldwallet-mining-txid-value {
+    background: rgba(0, 0, 0, 0.3);
+    color: #e8e6e3;
+  }
+
+  :host(.dark-card) .zeldwallet-mining-broadcast {
+    background: linear-gradient(135deg, #d4af37 0%, #b8960c 100%);
+    color: #0f0f16;
+  }
+
+  :host(.dark-card) .zeldwallet-mining-broadcast:hover {
+    background: linear-gradient(135deg, #e8c454 0%, #d4af37 100%);
+    box-shadow: 0 4px 12px rgba(212, 175, 55, 0.3);
+  }
+
+  :host(.dark-card) .zeldwallet-mining-mempool-link {
+    background: #1e1e28;
+    border-color: #059669;
+    color: #6ee7b7;
+  }
+
+  :host(.dark-card) .zeldwallet-mining-mempool-link:hover {
+    background: #0d3320;
+  }
+
+  :host(.dark-card) .zeldwallet-mining-cancel {
+    background: #1e1e28;
+    border-color: #2d2d3a;
+    color: #9ca3af;
+  }
+
+  :host(.dark-card) .zeldwallet-mining-cancel:hover {
+    background: #2d2d3a;
+  }
+
+  :host(.dark-card) .zeldwallet-mining-error {
+    background: linear-gradient(135deg, #3b1212 0%, #450a0a 100%);
+    border-color: #dc2626;
+  }
+
+  :host(.dark-card) .zeldwallet-mining-error-message {
+    color: #fca5a5;
+  }
+
+  :host(.dark-card) .zeldwallet-mining-retry {
+    background: #1e1e28;
+    border-color: #dc2626;
+    color: #fca5a5;
+  }
+
+  :host(.dark-card) .zeldwallet-mining-retry:hover {
+    background: #3b1212;
+  }
 `;
 

@@ -2,6 +2,7 @@ import type { NetworkType } from '../types';
 import {
   bindBackupActions,
   bindCopyButtons,
+  bindHunting,
   bindPasswordForm,
   bindPasswordVisibility,
   bindSetPasswordActions,
@@ -227,6 +228,20 @@ export class ZeldWalletUI extends BaseElement {
         onCancel: () => this.controller.hideBackupForm(),
         onCloseResult: () => this.controller.clearBackupResult(),
       }, strings);
+      bindHunting(this.shadowRootRef, {
+        onSendBtcChange: (checked) => this.controller.setHuntingSendBtc(checked),
+        onSendZeldChange: (checked) => this.controller.setHuntingSendZeld(checked),
+        onZeroCountChange: (value) => this.controller.setHuntingZeroCount(value),
+        onUseGpuChange: (checked) => this.controller.setHuntingUseGpu(checked),
+        onAddressChange: (value) => this.controller.setHuntingAddress(value),
+        onAmountChange: (value) => this.controller.setHuntingAmount(value),
+        onHunt: () => this.controller.startHunting(),
+        onMiningStop: () => this.controller.stopMining(),
+        onMiningResume: () => this.controller.resumeMining(),
+        onMiningSign: () => this.controller.signAndBroadcast(),
+        onMiningCancel: () => this.controller.cancelMining(),
+        onMiningRetry: () => this.controller.retryMining(),
+      });
     }
   }
 

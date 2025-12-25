@@ -21,13 +21,15 @@
     "react-dom": "^18.2.0"
   },
   "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
+    "copy-wasm": "mkdir -p public/wasm && cp node_modules/zeldhash-miner/wasm/* public/wasm/ && cp node_modules/zeldhash-miner/dist/worker.js public/ && node -e \"const fs=require('fs');const p='public/worker.js';if(fs.existsSync(p)){const c=fs.readFileSync(p,'utf8').replace(/\\n?\\/\\/\\# sourceMappingURL=worker\\.js\\.map\\s*$/,'');fs.writeFileSync(p,c);}\"",
+    "dev": "npm run copy-wasm && vite",
+    "build": "npm run copy-wasm && tsc && vite build",
     "preview": "vite preview",
     "test": "vitest",
     "test:run": "vitest run",
     "lint": "eslint src --ext .ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "postinstall": "npm run copy-wasm"
   },
   "keywords": [
     "bitcoin",
@@ -50,7 +52,8 @@
     "buffer": "^6.0.3",
     "idb": "^8.0.0",
     "sats-connect": "^4.2.1",
-    "tiny-secp256k1": "^2.2.4"
+    "tiny-secp256k1": "^2.2.4",
+    "zeldhash-miner": "^0.1.0"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",

@@ -73,6 +73,39 @@ export type LocaleStrings = {
   walletUserCancelled: string;
   walletUserCancelledSigning: string;
   backupFilename: string;
+  // Hunting section
+  huntingSendBtc: string;
+  huntingSendZeld: string;
+  huntingZeroCount: string;
+  huntingUseGpu: string;
+  huntingHunt: string;
+  huntingAddressPlaceholder: string;
+  huntingAmountPlaceholder: string;
+  huntingAmountPlaceholderZeld: string;
+  huntingDisabledNoBtc: string;
+  huntingDisabledNoZeld: string;
+  huntingDisabledInvalidAddress: string;
+  huntingDisabledInvalidAmount: string;
+  huntingDisabledInsufficientBtc: string;
+  huntingDisabledInsufficientZeld: string;
+  // Mining progress
+  miningHashRate: string;
+  miningAttempts: string;
+  miningElapsed: string;
+  miningStop: string;
+  miningResume: string;
+  miningStatusMining: string;
+  miningStatusPaused: string;
+  miningStatusFound: string;
+  miningStatusSigning: string;
+  miningStatusBroadcast: string;
+  miningStatusError: string;
+  miningCongrats: string;
+  miningTxidLabel: string;
+  miningSignAndBroadcast: string;
+  miningViewOnMempool: string;
+  miningRetry: string;
+  miningCancel: string;
 };
 
 export type LocaleStringsInput = Partial<LocaleStrings>;

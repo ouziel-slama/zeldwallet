@@ -1,4 +1,4 @@
-import satsConnect, { AddressPurpose as SatsPurpose, BitcoinNetworkType, getAddress, signMessage as satsSignMessage, MessageSigningProtocols } from 'sats-connect';
+import satsConnect, { AddressPurpose as SatsPurpose, BitcoinNetworkType, getAddress, signMessage as satsSignMessage, signTransaction, MessageSigningProtocols } from 'sats-connect';
 import type { AddressInfo, AddressType, NetworkType, SignInputOptions } from '../types';
 import { DEFAULT_PROVIDER } from './constants';
 
@@ -533,13 +533,132 @@ export const connectExternalWallet = async (
     return (resp as any)?.signature ?? JSON.stringify(resp);
   };
 
-  const signPsbt = typeof (provider as any)?.request === 'function'
-    ? async (psbtBase64: string, inputs: SignInputOptions[]): Promise<string> => {
-        const resp = normalizeResponse(await (provider as any).request('signPsbt', { psbt: psbtBase64, signInputs: inputs }));
-        if (typeof resp === 'string') return resp;
-        return (resp as any)?.psbt ?? JSON.stringify(resp);
+  const signPsbt = async (psbtBase64: string, inputs: SignInputOptions[]): Promise<string> => {
+    console.log('[signPsbt] Called with:', { psbtBase64: psbtBase64.slice(0, 50) + '...', inputs, walletId });
+    
+    // Convert SignInputOptions[] to Record<address, number[]> format expected by sats-connect
+    const signInputsMap: Record<string, number[]> = {};
+    for (const input of inputs) {
+      if (!input.address) {
+        console.warn('[signPsbt] Input missing address, cannot sign:', input);
+        continue;
       }
-    : undefined;
+      if (!signInputsMap[input.address]) {
+        signInputsMap[input.address] = [];
+      }
+      signInputsMap[input.address].push(input.index);
+    }
+    
+    console.log('[signPsbt] Converted signInputs to map format:', signInputsMap);
+    
+    const requestFn = typeof (provider as any)?.request === 'function' ? (provider as any).request.bind(provider) : undefined;
+    
+    // Build inputsToSign array for sats-connect signTransaction
+    const inputsToSign = Object.entries(signInputsMap).map(([address, signingIndexes]) => ({
+      address,
+      signingIndexes,
+    }));
+    
+    // Wallet-specific handling
+    const isXverse = walletId === 'xverse';
+    const isLeather = walletId === 'leather';
+    
+    // For Leather: use hex format and different API
+    if (isLeather && requestFn) {
+      console.log('[signPsbt] Using Leather-specific format');
+      try {
+        // Convert base64 PSBT to hex
+        const psbtHex = Buffer.from(psbtBase64, 'base64').toString('hex');
+        
+        // Leather expects signAtIndex as an array of input indices to sign
+        const signAtIndex = inputs.map(i => i.index);
+        
+        const leatherParams = {
+          hex: psbtHex,
+          signAtIndex,
+          broadcast: false,
+        };
+        
+        console.log('[signPsbt] Leather params:', { hexLength: psbtHex.length, signAtIndex });
+        const resp = normalizeResponse(await requestFn('signPsbt', leatherParams));
+        console.log('[signPsbt] Leather response:', resp);
+        
+        // Leather returns hex, convert back to base64
+        if (typeof resp === 'string') {
+          // Check if it's hex (no padding chars, only hex chars)
+          if (/^[0-9a-fA-F]+$/.test(resp)) {
+            return Buffer.from(resp, 'hex').toString('base64');
+          }
+          return resp;
+        }
+        const hexResult = (resp as any)?.hex ?? (resp as any)?.psbt ?? (resp as any)?.psbtBase64;
+        if (hexResult && /^[0-9a-fA-F]+$/.test(hexResult)) {
+          return Buffer.from(hexResult, 'hex').toString('base64');
+        }
+        return hexResult ?? JSON.stringify(resp);
+      } catch (err: any) {
+        console.error('[signPsbt] Leather error:', err);
+        // Check if user cancelled
+        const errorMessage = err?.message ?? String(err);
+        const errorCode = err?.code ?? err?.error?.code;
+        if (errorCode === 4001 || errorMessage.toLowerCase().includes('cancel') || errorMessage.toLowerCase().includes('denied')) {
+          throw codedError('User cancelled signing.', 'user-cancelled-signing');
+        }
+        throw err;
+      }
+    }
+    
+    // For Xverse, Magic Eden: use sats-connect signTransaction with getProvider
+    // This properly handles user cancellation and wallet UI
+    if (isMagicEden || isXverse) {
+      console.log('[signPsbt] Using sats-connect signTransaction for', walletId);
+      
+      // Determine the getProvider function based on wallet type
+      const getProviderFn = isMagicEden 
+        ? () => (window as any)?.magicEden?.bitcoin
+        : () => provider; // For Xverse, use the provider we already have
+      
+      return new Promise((resolve, reject) => {
+        signTransaction({
+          getProvider: getProviderFn,
+          payload: {
+            network: { type: sessionNetwork === 'testnet' ? BitcoinNetworkType.Testnet : BitcoinNetworkType.Mainnet },
+            message: 'Sign transaction to complete your hunt',
+            psbtBase64,
+            inputsToSign,
+            broadcast: false,
+          },
+          onFinish: (response: any) => {
+            console.log('[signPsbt] signTransaction response:', response);
+            resolve(typeof response === 'string' ? response : response?.psbtBase64 ?? JSON.stringify(response));
+          },
+          onCancel: () => reject(codedError('User cancelled signing.', 'user-cancelled-signing')),
+        });
+      });
+    }
+    
+    // For other wallets: try provider.request directly
+    if (requestFn) {
+      console.log('[signPsbt] Using provider.request directly');
+      const params = { psbt: psbtBase64, signInputs: signInputsMap, broadcast: false };
+      const resp = normalizeResponse(await requestFn('signPsbt', params));
+      console.log('[signPsbt] provider.request response:', resp);
+      if (typeof resp === 'string') return resp;
+      return (resp as any)?.psbt ?? (resp as any)?.psbtBase64 ?? JSON.stringify(resp);
+    }
+    
+    // Fallback to sats-connect request
+    console.log('[signPsbt] Using sats-connect.request fallback');
+    const params = { psbt: psbtBase64, signInputs: signInputsMap, broadcast: false };
+    if (scRequest) {
+      const resp = normalizeResponse(await scRequest.call(satsConnect as any, 'signPsbt', params as any, entry.id, { skipGetInfo: true }));
+      console.log('[signPsbt] sats-connect response:', resp);
+      if (typeof resp === 'string') return resp;
+      return (resp as any)?.psbt ?? (resp as any)?.psbtBase64 ?? JSON.stringify(resp);
+    }
+    
+    throw codedError('No wallet provider found for signing', 'wallet-no-provider');
+  };
 
   return {
     id: walletId,

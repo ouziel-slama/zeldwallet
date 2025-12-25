@@ -205,3 +205,139 @@ export const bindWalletSwitcher = (shadowRoot: ShadowRoot, handlers: WalletSwitc
   }
 };
 
+type HuntingHandlers = {
+  onSendBtcChange: (checked: boolean) => void;
+  onSendZeldChange: (checked: boolean) => void;
+  onZeroCountChange: (value: number) => void;
+  onUseGpuChange: (checked: boolean) => void;
+  onAddressChange: (value: string) => void;
+  onAmountChange: (value: string) => void;
+  onHunt: () => void;
+  onMiningStop: () => void;
+  onMiningResume: () => void;
+  onMiningSign: () => void;
+  onMiningCancel: () => void;
+  onMiningRetry: () => void;
+};
+
+export const bindHunting = (shadowRoot: ShadowRoot, handlers: HuntingHandlers): void => {
+  // Send BTC checkbox
+  const sendBtcCheckbox = shadowRoot.querySelector<HTMLInputElement>('[data-hunting-send-btc]');
+  if (sendBtcCheckbox) {
+    sendBtcCheckbox.addEventListener('change', () => {
+      handlers.onSendBtcChange(sendBtcCheckbox.checked);
+    });
+  }
+
+  // Send Zeld checkbox
+  const sendZeldCheckbox = shadowRoot.querySelector<HTMLInputElement>('[data-hunting-send-zeld]');
+  if (sendZeldCheckbox) {
+    sendZeldCheckbox.addEventListener('change', () => {
+      handlers.onSendZeldChange(sendZeldCheckbox.checked);
+    });
+  }
+
+  // Zero count slider
+  const zeroCountSlider = shadowRoot.querySelector<HTMLInputElement>('[data-hunting-zero-count]');
+  if (zeroCountSlider) {
+    zeroCountSlider.addEventListener('input', () => {
+      handlers.onZeroCountChange(parseInt(zeroCountSlider.value, 10));
+    });
+  }
+
+  // Use GPU checkbox
+  const useGpuCheckbox = shadowRoot.querySelector<HTMLInputElement>('[data-hunting-use-gpu]');
+  if (useGpuCheckbox) {
+    useGpuCheckbox.addEventListener('change', () => {
+      handlers.onUseGpuChange(useGpuCheckbox.checked);
+    });
+  }
+
+  // Address input
+  const addressInput = shadowRoot.querySelector<HTMLInputElement>('[data-hunting-address]');
+  if (addressInput) {
+    addressInput.addEventListener('input', () => {
+      handlers.onAddressChange(addressInput.value);
+    });
+  }
+
+  // Amount input
+  const amountInput = shadowRoot.querySelector<HTMLInputElement>('[data-hunting-amount]');
+  if (amountInput) {
+    amountInput.addEventListener('input', () => {
+      handlers.onAmountChange(amountInput.value);
+    });
+  }
+
+  // Hunt button
+  const huntButton = shadowRoot.querySelector<HTMLButtonElement>('[data-hunting-hunt]');
+  if (huntButton) {
+    huntButton.addEventListener('click', (event) => {
+      event.preventDefault();
+      handlers.onHunt();
+    });
+  }
+
+  // Mining stop button
+  const stopButton = shadowRoot.querySelector<HTMLButtonElement>('[data-mining-stop]');
+  if (stopButton) {
+    console.log('[ZeldWalletUI] binding stop button');
+    stopButton.addEventListener('click', (event) => {
+      event.preventDefault();
+      console.log('[ZeldWalletUI] stop button clicked');
+      handlers.onMiningStop();
+    });
+  }
+
+  // Delegated click fallback (covers re-renders where specific listeners might be lost)
+  if (!(shadowRoot as any)._zeldHuntingDelegatedBound) {
+    shadowRoot.addEventListener('click', (event) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('[data-mining-stop]')) {
+        event.preventDefault();
+        console.log('[ZeldWalletUI] delegated stop click');
+        handlers.onMiningStop();
+        return;
+      }
+    });
+    (shadowRoot as any)._zeldHuntingDelegatedBound = true;
+  }
+
+  // Mining resume button
+  const resumeButton = shadowRoot.querySelector<HTMLButtonElement>('[data-mining-resume]');
+  if (resumeButton) {
+    resumeButton.addEventListener('click', (event) => {
+      event.preventDefault();
+      handlers.onMiningResume();
+    });
+  }
+
+  // Mining sign & broadcast button
+  const signButton = shadowRoot.querySelector<HTMLButtonElement>('[data-mining-sign]');
+  if (signButton) {
+    signButton.addEventListener('click', (event) => {
+      event.preventDefault();
+      handlers.onMiningSign();
+    });
+  }
+
+  // Mining cancel button
+  const cancelButton = shadowRoot.querySelector<HTMLButtonElement>('[data-mining-cancel]');
+  if (cancelButton) {
+    cancelButton.addEventListener('click', (event) => {
+      event.preventDefault();
+      handlers.onMiningCancel();
+    });
+  }
+
+  // Mining retry button
+  const retryButton = shadowRoot.querySelector<HTMLButtonElement>('[data-mining-retry]');
+  if (retryButton) {
+    retryButton.addEventListener('click', (event) => {
+      event.preventDefault();
+      handlers.onMiningRetry();
+    });
+  }
+};
+
+

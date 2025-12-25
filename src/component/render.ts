@@ -4,7 +4,10 @@ import {
   type ActionView,
   type BalanceType,
   type BalanceView,
+  type HuntingView,
   type InlineWarningView,
+  type MiningProgressView,
+  type MiningResultView,
   type RenderTemplateProps,
   type WalletViewModel,
   type WalletSwitcherView,
@@ -22,7 +25,13 @@ const UNLOCK_ICON = `<svg class="zeldwallet-btn-icon" width="16" height="16" vie
 const CHECK_ICON = `<svg class="zeldwallet-btn-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
 const ZAP_ICON = `<svg class="zeldwallet-btn-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>`;
 const CHEVRON_ICON = `<svg class="zeldwallet-chevron-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>`;
-export { COPY_ICON, COPIED_ICON, DOWNLOAD_ICON, CANCEL_ICON, UNLOCK_ICON, CHECK_ICON };
+const TARGET_ICON = `<svg class="zeldwallet-btn-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>`;
+const STOP_ICON = `<svg class="zeldwallet-btn-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>`;
+const PLAY_ICON = `<svg class="zeldwallet-btn-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>`;
+const BROADCAST_ICON = `<svg class="zeldwallet-btn-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><path d="M22 2L15 22L11 13L2 9L22 2Z"/></svg>`;
+const EXTERNAL_LINK_ICON = `<svg class="zeldwallet-btn-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>`;
+const REFRESH_ICON = `<svg class="zeldwallet-btn-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg>`;
+export { COPY_ICON, COPIED_ICON, DOWNLOAD_ICON, CANCEL_ICON, UNLOCK_ICON, CHECK_ICON, TARGET_ICON };
 
 const buildStatusBlock = (status?: WalletViewModel['status'], isGenerating?: boolean): string => {
   if (!status) return '';
@@ -355,6 +364,230 @@ const buildActionsBlock = (actions: ActionView[], title: string): string => {
       `;
 };
 
+const buildMiningProgress = (progress: MiningProgressView): string => {
+  const pauseResumeButton = progress.isPaused
+    ? `<button class="zeldwallet-mining-control" type="button" data-mining-resume>${PLAY_ICON} ${progress.resumeLabel}</button>`
+    : `<button class="zeldwallet-mining-control" type="button" data-mining-stop>${STOP_ICON} ${progress.stopLabel}</button>`;
+
+  return `
+    <div class="zeldwallet-mining-progress">
+      <div class="zeldwallet-mining-stats">
+        <div class="zeldwallet-mining-stat">
+          <span class="zeldwallet-mining-stat-label">${progress.hashRateLabel}</span>
+          <span class="zeldwallet-mining-stat-value">${progress.hashRateFormatted}</span>
+        </div>
+        <div class="zeldwallet-mining-stat">
+          <span class="zeldwallet-mining-stat-label">${progress.attemptsLabel}</span>
+          <span class="zeldwallet-mining-stat-value">${progress.attemptsFormatted}</span>
+        </div>
+        <div class="zeldwallet-mining-stat">
+          <span class="zeldwallet-mining-stat-label">${progress.elapsedLabel}</span>
+          <span class="zeldwallet-mining-stat-value">${progress.elapsedFormatted}</span>
+        </div>
+      </div>
+      <div class="zeldwallet-mining-actions">
+        ${pauseResumeButton}
+      </div>
+    </div>
+  `;
+};
+
+const buildMiningResult = (result: MiningResultView): string => {
+  const signButton = result.showSignButton
+    ? `<button class="zeldwallet-mining-broadcast" type="button" data-mining-sign>${BROADCAST_ICON} ${result.signAndBroadcastLabel}</button>`
+    : '';
+
+  const mempoolLink = result.showMempoolLink && result.mempoolUrl
+    ? `<a class="zeldwallet-mining-mempool-link" href="${result.mempoolUrl}" target="_blank" rel="noopener noreferrer">${EXTERNAL_LINK_ICON} ${result.viewOnMempoolLabel}</a>`
+    : '';
+
+  return `
+    <div class="zeldwallet-mining-result">
+      <div class="zeldwallet-mining-congrats">${result.congratsMessage}</div>
+      <div class="zeldwallet-mining-txid">
+        <span class="zeldwallet-mining-txid-label">${result.txidLabel}:</span>
+        <span class="zeldwallet-mining-txid-value" title="${result.txid}">${result.txid.slice(0, 8)}...${result.txid.slice(-8)}</span>
+        <button class="zeldwallet-copy zeldwallet-copy-icon" type="button" data-copy="${result.txid}" data-tooltip="Copy">${COPY_ICON}</button>
+      </div>
+      <div class="zeldwallet-mining-result-actions">
+        ${signButton}
+        ${mempoolLink}
+        <button class="zeldwallet-mining-cancel" type="button" data-mining-cancel>${CANCEL_ICON} ${result.cancelLabel}</button>
+      </div>
+    </div>
+  `;
+};
+
+const buildMiningError = (error: string, retryLabel: string): string => `
+  <div class="zeldwallet-mining-error">
+    <span class="zeldwallet-mining-error-message">${escapeHtml(error)}</span>
+    <button class="zeldwallet-mining-retry" type="button" data-mining-retry>${REFRESH_ICON} ${retryLabel}</button>
+  </div>
+`;
+
+/**
+ * Builds the final stats display (read-only, no controls) for showing with the result.
+ */
+const buildMiningFinalStats = (progress: MiningProgressView): string => {
+  return `
+    <div class="zeldwallet-mining-final-stats">
+      <div class="zeldwallet-mining-stat">
+        <span class="zeldwallet-mining-stat-label">${progress.hashRateLabel}</span>
+        <span class="zeldwallet-mining-stat-value">${progress.hashRateFormatted}</span>
+      </div>
+      <div class="zeldwallet-mining-stat">
+        <span class="zeldwallet-mining-stat-label">${progress.attemptsLabel}</span>
+        <span class="zeldwallet-mining-stat-value">${progress.attemptsFormatted}</span>
+      </div>
+      <div class="zeldwallet-mining-stat">
+        <span class="zeldwallet-mining-stat-label">${progress.elapsedLabel}</span>
+        <span class="zeldwallet-mining-stat-value">${progress.elapsedFormatted}</span>
+      </div>
+    </div>
+  `;
+};
+
+const buildHuntingBlock = (hunting: HuntingView | undefined): string => {
+  if (!hunting || !hunting.visible) return '';
+
+  // Show mining result if we have one (with final stats)
+  if (hunting.miningResult) {
+    const finalStatsBlock = hunting.miningProgress ? buildMiningFinalStats(hunting.miningProgress) : '';
+    return `
+      <div class="zeldwallet-hunting">
+        ${finalStatsBlock}
+        ${buildMiningResult(hunting.miningResult)}
+      </div>
+    `;
+  }
+
+  // Show error if mining failed
+  if (hunting.miningError && !hunting.isMining) {
+    return `
+      <div class="zeldwallet-hunting">
+        ${buildMiningError(hunting.miningError, hunting.retryLabel)}
+      </div>
+    `;
+  }
+
+  // Show mining progress if mining
+  if (hunting.miningProgress) {
+    return `
+      <div class="zeldwallet-hunting">
+        ${buildMiningProgress(hunting.miningProgress)}
+      </div>
+    `;
+  }
+
+  // Normal hunting controls
+  const sendFieldsBlock = hunting.showSendFields
+    ? `
+      <div class="zeldwallet-hunting-send-fields">
+        <input
+          type="text"
+          class="zeldwallet-hunting-input zeldwallet-hunting-address${hunting.addressError ? ' error' : ''}"
+          placeholder="${hunting.addressPlaceholder}"
+          value="${escapeHtml(hunting.recipientAddress)}"
+          data-hunting-address
+        />
+        <input
+          type="text"
+          class="zeldwallet-hunting-input zeldwallet-hunting-amount${hunting.amountError ? ' error' : ''}"
+          placeholder="${hunting.amountPlaceholder}"
+          value="${escapeHtml(hunting.amount)}"
+          data-hunting-amount
+        />
+      </div>
+    `
+    : '';
+
+  // Wrap disabled button in a span to enable hover tooltip (disabled buttons don't receive pointer events)
+  const huntButton = hunting.huntEnabled
+    ? `
+        <button
+          class="zeldwallet-hunt-button"
+          type="button"
+          data-hunting-hunt
+        >
+          ${TARGET_ICON}
+          ${hunting.huntLabel}
+        </button>
+      `
+    : `
+        <span class="zeldwallet-hunt-button-wrapper" data-tooltip="${escapeHtml(hunting.huntDisabledReason ?? '')}">
+          <button
+            class="zeldwallet-hunt-button"
+            type="button"
+            disabled
+            data-hunting-hunt
+          >
+            ${TARGET_ICON}
+            ${hunting.huntLabel}
+          </button>
+        </span>
+      `;
+
+  return `
+    <div class="zeldwallet-hunting">
+      ${sendFieldsBlock}
+      <div class="zeldwallet-hunting-controls">
+        <label class="zeldwallet-hunting-checkbox${!hunting.sendBtcEnabled ? ' disabled' : ''}">
+          <input
+            type="checkbox"
+            data-hunting-send-btc
+            ${hunting.sendBtcChecked ? 'checked' : ''}
+            ${!hunting.sendBtcEnabled || hunting.sendZeldChecked || hunting.isMining ? 'disabled' : ''}
+          />
+          ${hunting.sendBtcLabel}
+        </label>
+        <label class="zeldwallet-hunting-checkbox${!hunting.sendZeldEnabled ? ' disabled' : ''}">
+          <input
+            type="checkbox"
+            data-hunting-send-zeld
+            ${hunting.sendZeldChecked ? 'checked' : ''}
+            ${!hunting.sendZeldEnabled || hunting.sendBtcChecked || hunting.isMining ? 'disabled' : ''}
+          />
+          ${hunting.sendZeldLabel}
+        </label>
+        <div class="zeldwallet-hunting-slider">
+          <span>${hunting.zeroCountLabel}</span>
+          <input
+            type="range"
+            min="6"
+            max="10"
+            value="${hunting.zeroCount}"
+            data-hunting-zero-count
+            ${hunting.isMining ? 'disabled' : ''}
+          />
+          <span class="zeldwallet-hunting-slider-value">${hunting.zeroCount}</span>
+        </div>
+        <label class="zeldwallet-hunting-checkbox">
+          <input
+            type="checkbox"
+            data-hunting-use-gpu
+            ${hunting.useGpu ? 'checked' : ''}
+            ${hunting.isMining ? 'disabled' : ''}
+          />
+          ${hunting.useGpuLabel}
+        </label>
+        ${huntButton}
+      </div>
+    </div>
+  `;
+};
+
+/**
+ * Escapes HTML special characters to prevent XSS.
+ */
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 export const buildTemplate = (props: RenderTemplateProps): string => {
   const view = buildViewModel(props);
   const { dir, state } = props;
@@ -367,6 +600,7 @@ export const buildTemplate = (props: RenderTemplateProps): string => {
   const backupResultBlock = buildBackupResult(view.backupResult);
   const statusBlock = buildStatusBlock(view.status, state.status === 'generating' || state.status === 'recovering');
   const actionsBlock = buildActionsBlock(view.header.actions, props.strings.securityActionsLabel);
+  const huntingBlock = buildHuntingBlock(view.hunting);
   const walletSwitcherBlock = buildWalletSwitcher(view.walletSwitcher);
 
   const headerContent = view.header.actions.length ? actionsBlock : warningsBlock;
@@ -388,6 +622,7 @@ export const buildTemplate = (props: RenderTemplateProps): string => {
         ${statusBlock}
         ${lockedBlock}
         ${readyBlock}
+        ${huntingBlock}
         ${walletSwitcherBlock}
       </div>
     `;

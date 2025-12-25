@@ -5,6 +5,7 @@
  * then uses ZeldHash API to fetch ZELD balance for those UTXOs.
  */
 
+import type { AddressInfo } from '../types';
 import { DEFAULT_ELECTRS_URL, DEFAULT_ZELDHASH_API_URL } from './constants';
 
 export type UtxoResponse = {
@@ -26,6 +27,8 @@ export type ZeldBalanceResponse = {
 export type BalanceResult = {
   btcSats: number;
   zeldBalance: number;
+  /** BTC balance in sats for payment address only (first address if multiple) */
+  btcPaymentSats?: number;
 };
 
 /**
@@ -101,23 +104,38 @@ async function fetchAddressBalance(
 
 /**
  * Fetches combined balance for multiple addresses.
+ * Explicitly identifies the payment address by purpose to avoid ordering issues.
  */
 export async function fetchBalances(
-  addresses: string[],
+  addresses: AddressInfo[],
   electrsUrl: string = DEFAULT_ELECTRS_URL,
   zeldhashApiUrl: string = DEFAULT_ZELDHASH_API_URL
 ): Promise<BalanceResult> {
   if (addresses.length === 0) {
-    return { btcSats: 0, zeldBalance: 0 };
+    return { btcSats: 0, zeldBalance: 0, btcPaymentSats: 0 };
   }
 
+  // Find payment address by purpose, not by position
+  const paymentAddress = addresses.find((a) => a.purpose === 'payment');
+  const addressStrings = addresses.map((a) => a.address).filter(Boolean);
+
   const results = await Promise.all(
-    addresses.map((addr) => fetchAddressBalance(addr, electrsUrl, zeldhashApiUrl))
+    addressStrings.map((addr) => fetchAddressBalance(addr, electrsUrl, zeldhashApiUrl))
   );
+
+  // Find payment balance by matching the address string
+  let btcPaymentSats = 0;
+  if (paymentAddress) {
+    const paymentIndex = addressStrings.indexOf(paymentAddress.address);
+    if (paymentIndex >= 0 && results[paymentIndex]) {
+      btcPaymentSats = results[paymentIndex].btcSats;
+    }
+  }
 
   return {
     btcSats: results.reduce((sum, r) => sum + r.btcSats, 0),
     zeldBalance: results.reduce((sum, r) => sum + r.zeldBalance, 0),
+    btcPaymentSats,
   };
 }
 

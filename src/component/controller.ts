@@ -1,17 +1,21 @@
+import * as bitcoin from 'bitcoinjs-lib';
 import { ZeldWallet } from '../ZeldWallet';
 import type { AddressInfo, NetworkType, WalletEvent } from '../types';
+import { isValidBitcoinAddress } from '../utils/validation';
 import { UnifiedWallet } from '../unifiedWallet';
-import { fetchBalances } from './balance';
-import { DEFAULT_ELECTRS_URL, DEFAULT_PROVIDER, DEFAULT_ZELDHASH_API_URL } from './constants';
+import { fetchBalances, type UtxoResponse } from './balance';
+import { DEFAULT_ELECTRS_URL, DEFAULT_PROVIDER, DEFAULT_ZELDHASH_API_URL, DUST, MIN_FEE_RESERVE } from './constants';
 import { describeError, isPasswordRequiredError, isWrongPasswordError } from './errors';
 import { getDirection, getStrings, resolveLocale, type LocaleKey, type LocaleStrings, type TextDirection } from './i18n';
-import { createInitialState, type ComponentState } from './state';
+import { createInitialHuntingState, createInitialState, type ComponentState } from './state';
+import { prepareMinerArgs, type OrdinalsUtxo, type UtxoInfo } from './miner';
 import {
   connectExternalWallet,
   discoverWallets,
   type SupportedWalletId,
   type WalletDiscovery,
 } from './wallets';
+import { ZeldMiner, ZeldMinerError, ZeldMinerErrorCode, type ProgressStats, type MineResult } from 'zeldhash-miner';
 
 const BALANCE_REFRESH_INTERVAL_MS = 30_000;
 
@@ -41,6 +45,15 @@ type StoredWalletPreference = { id: SupportedWalletId; network?: NetworkType };
 
 const LAST_WALLET_STORAGE_KEY = 'zeldwallet:lastWallet';
 
+// Default fee rate in sats/vbyte
+const DEFAULT_SATS_PER_VBYTE = 12;
+// GPU batch size for better throughput
+const GPU_BATCH_SIZE = 65_536;
+// CPU batch size
+const CPU_BATCH_SIZE = 256;
+// Start inside the 4-byte nonce range to avoid template rebuild churn
+const DEFAULT_START_NONCE = 0n;
+
 export class ZeldWalletController {
   private locale: LocaleKey;
   private state: ComponentState;
@@ -58,6 +71,12 @@ export class ZeldWalletController {
   private electrsUrl: string;
   private zeldhashApiUrl: string;
   private balanceIntervalId?: ReturnType<typeof setInterval>;
+  // Miner state
+  private miner?: ZeldMiner;
+  private miningAbortController?: AbortController;
+  private miningRunId = 0;
+  private lastMiningProgressMs = 0;
+  private static readonly MIN_PROGRESS_INTERVAL_MS = 300;
 
   constructor(options?: ControllerOptions) {
     const discovery: WalletDiscovery = discoverWallets();
@@ -221,8 +240,9 @@ export class ZeldWalletController {
       return;
     }
 
-    const addressStrings = addresses.map((a) => a.address).filter(Boolean);
-    if (addressStrings.length === 0) {
+    // Filter out addresses with empty address strings
+    const validAddresses = addresses.filter((a) => Boolean(a.address));
+    if (validAddresses.length === 0) {
       this.setState({ balance: undefined });
       return;
     }
@@ -238,11 +258,12 @@ export class ZeldWalletController {
     });
 
     try {
-      const result = await fetchBalances(addressStrings, this.electrsUrl, this.zeldhashApiUrl);
+      const result = await fetchBalances(validAddresses, this.electrsUrl, this.zeldhashApiUrl);
       this.setState({
         balance: {
           btcSats: result.btcSats,
           zeldBalance: result.zeldBalance,
+          btcPaymentSats: result.btcPaymentSats,
           loading: false,
           error: undefined,
         },
@@ -699,6 +720,598 @@ export class ZeldWalletController {
       localStorage.setItem(LAST_WALLET_STORAGE_KEY, JSON.stringify(payload));
     } catch {
       // Ignore persistence failures to avoid blocking the UX.
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Hunting section methods
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  setHuntingSendBtc(checked: boolean): void {
+    const hunting = this.state.hunting ?? createInitialHuntingState();
+    this.setState({
+      hunting: {
+        ...hunting,
+        sendBtcChecked: checked,
+        // Mutual exclusivity: uncheck sendZeld if sendBtc is checked
+        sendZeldChecked: checked ? false : hunting.sendZeldChecked,
+        // Clear fields when unchecking
+        ...(checked ? {} : { recipientAddress: '', amount: '', addressError: undefined, amountError: undefined }),
+      },
+    });
+  }
+
+  setHuntingSendZeld(checked: boolean): void {
+    const hunting = this.state.hunting ?? createInitialHuntingState();
+    this.setState({
+      hunting: {
+        ...hunting,
+        sendZeldChecked: checked,
+        // Mutual exclusivity: uncheck sendBtc if sendZeld is checked
+        sendBtcChecked: checked ? false : hunting.sendBtcChecked,
+        // Clear fields when unchecking
+        ...(checked ? {} : { recipientAddress: '', amount: '', addressError: undefined, amountError: undefined }),
+      },
+    });
+  }
+
+  setHuntingZeroCount(value: number): void {
+    const hunting = this.state.hunting ?? createInitialHuntingState();
+    const clamped = Math.min(10, Math.max(6, value));
+    this.setState({
+      hunting: {
+        ...hunting,
+        zeroCount: clamped,
+      },
+    });
+  }
+
+  setHuntingUseGpu(checked: boolean): void {
+    const hunting = this.state.hunting ?? createInitialHuntingState();
+    this.setState({
+      hunting: {
+        ...hunting,
+        useGpu: checked,
+      },
+    });
+  }
+
+  setHuntingAddress(value: string): void {
+    const hunting = this.state.hunting ?? createInitialHuntingState();
+    const network = this.getSnapshot().network;
+    
+    // Validate address
+    let addressError: string | undefined;
+    if (value.trim() && !isValidBitcoinAddress(value.trim(), network)) {
+      addressError = getStrings(this.locale).huntingDisabledInvalidAddress;
+    }
+
+    this.setState({
+      hunting: {
+        ...hunting,
+        recipientAddress: value,
+        addressError,
+      },
+    });
+  }
+
+  setHuntingAmount(value: string): void {
+    const hunting = this.state.hunting ?? createInitialHuntingState();
+    
+    // Validate amount
+    let amountError: string | undefined;
+    if (value.trim()) {
+      const num = parseFloat(value.trim());
+      if (isNaN(num) || num <= 0) {
+        amountError = getStrings(this.locale).huntingDisabledInvalidAmount;
+      }
+    }
+
+    this.setState({
+      hunting: {
+        ...hunting,
+        amount: value,
+        amountError,
+      },
+    });
+  }
+
+  /**
+   * Starts the hunting process using zeldhash-miner.
+   */
+  async startHunting(): Promise<void> {
+    const runId = ++this.miningRunId;
+    console.log('[ZeldWalletController] startHunting invoked, runId=', runId);
+    this.lastMiningProgressMs = 0;
+    const hunting = this.state.hunting;
+    if (!hunting || hunting.miningStatus !== 'idle') {
+      console.warn('[ZeldWalletController] Cannot start hunting - invalid state');
+      return;
+    }
+
+    const addresses = this.state.addresses ?? [];
+    const paymentAddr = addresses.find((a) => a.purpose === 'payment');
+    const ordinalsAddr = addresses.find((a) => a.purpose === 'ordinals');
+
+    if (!paymentAddr?.address || !ordinalsAddr?.address) {
+      console.warn('[ZeldWalletController] Missing payment or ordinals address');
+      return;
+    }
+
+    const strings = getStrings(this.locale);
+    const network = this.getSnapshot().network;
+    const paymentBtcSats = this.state.balance?.btcPaymentSats ?? this.state.balance?.btcSats ?? 0;
+    const totalBtcSats = this.state.balance?.btcSats ?? 0;
+    const zeldBalance = this.state.balance?.zeldBalance ?? 0;
+    const simpleHuntThreshold = DUST + MIN_FEE_RESERVE;
+    const zeldHuntThreshold = 2 * DUST + MIN_FEE_RESERVE;
+
+    const trimmedAddress = hunting.recipientAddress.trim();
+    const trimmedAmount = hunting.amount.trim();
+    const parsedAmount = trimmedAmount ? parseFloat(trimmedAmount) : NaN;
+
+    // Validate per mode
+    let pendingBtcAmountSats: number | undefined;
+    let pendingZeldAmount: number | undefined;
+
+    if (!hunting.sendBtcChecked && !hunting.sendZeldChecked) {
+      if (paymentBtcSats < simpleHuntThreshold) {
+        this.setMiningError(strings.huntingDisabledNoBtc);
+        return;
+      }
+    } else if (hunting.sendBtcChecked) {
+      if (!trimmedAddress || !isValidBitcoinAddress(trimmedAddress, network)) {
+        this.setMiningError(strings.huntingDisabledInvalidAddress);
+        return;
+      }
+      if (!trimmedAmount || !Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+        this.setMiningError(strings.huntingDisabledInvalidAmount);
+        return;
+      }
+      pendingBtcAmountSats = Math.round(parsedAmount * 100_000_000);
+      const required = pendingBtcAmountSats + DUST + MIN_FEE_RESERVE;
+      if (paymentBtcSats < required) {
+        this.setMiningError(strings.huntingDisabledInsufficientBtc);
+        return;
+      }
+    } else if (hunting.sendZeldChecked) {
+      if (!trimmedAddress || !isValidBitcoinAddress(trimmedAddress, network)) {
+        this.setMiningError(strings.huntingDisabledInvalidAddress);
+        return;
+      }
+      if (!trimmedAmount || !Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+        this.setMiningError(strings.huntingDisabledInvalidAmount);
+        return;
+      }
+      pendingZeldAmount = Math.round(parsedAmount * 100_000_000);
+      if (zeldBalance < pendingZeldAmount) {
+        this.setMiningError(strings.huntingDisabledInsufficientZeld);
+        return;
+      }
+      if (totalBtcSats < zeldHuntThreshold) {
+        this.setMiningError(strings.huntingDisabledInsufficientBtc);
+        return;
+      }
+    }
+
+    // Set mining status
+    this.setHuntingState({ miningStatus: 'mining', miningError: undefined, miningResult: undefined, broadcastTxid: undefined });
+
+    try {
+      // Fetch UTXOs
+      const [paymentUtxos, ordinalsUtxos] = await Promise.all([
+        this.fetchUtxosForAddress(paymentAddr.address),
+        this.fetchOrdinalsUtxosWithZeld(ordinalsAddr.address),
+      ]);
+
+      // If user stopped while we were preparing, abort early
+      if (runId !== this.miningRunId) {
+        console.log('[ZeldWalletController] startHunting aborted after fetch (stale run)', { runId, current: this.miningRunId });
+        return;
+      }
+
+      // Build optional outputs
+      let btcOutput: { address: string; amount: number } | undefined;
+      let zeldOutput: { address: string; amount: number } | undefined;
+
+      if (pendingBtcAmountSats !== undefined) {
+        btcOutput = { address: trimmedAddress, amount: pendingBtcAmountSats };
+      }
+      if (pendingZeldAmount !== undefined) {
+        zeldOutput = { address: trimmedAddress, amount: pendingZeldAmount };
+      }
+
+      // Prepare miner arguments
+      const minerArgs = prepareMinerArgs(
+        paymentAddr.address,
+        paymentUtxos as UtxoInfo[],
+        ordinalsAddr.address,
+        ordinalsUtxos,
+        hunting.zeroCount,
+        hunting.useGpu,
+        btcOutput,
+        zeldOutput,
+        network
+      );
+
+      // Create miner instance
+      const batchSize = hunting.useGpu ? GPU_BATCH_SIZE : CPU_BATCH_SIZE;
+      this.miner = new ZeldMiner({
+        network: network === 'mainnet' ? 'mainnet' : 'testnet',
+        batchSize,
+        useWebGPU: hunting.useGpu,
+        workerThreads: Math.max(1, navigator.hardwareConcurrency || 4),
+        satsPerVbyte: DEFAULT_SATS_PER_VBYTE,
+      });
+
+      // Create abort controller
+      this.miningAbortController = new AbortController();
+
+      // If a new run was started/stopped before reaching this point, abort
+      if (runId !== this.miningRunId) {
+        console.log('[ZeldWalletController] startHunting aborting miner init (stale run)', { runId, current: this.miningRunId });
+        this.miningAbortController.abort();
+        return;
+      }
+
+      // Set up event handlers
+      this.miner.on('progress', (stats: ProgressStats) => {
+        const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+        if (now - this.lastMiningProgressMs < ZeldWalletController.MIN_PROGRESS_INTERVAL_MS) {
+          return;
+        }
+        this.lastMiningProgressMs = now;
+        // DEBUG: Log raw stats to compare with web-demo
+        console.log('[ZeldWallet Mining]', {
+          hashRate: stats.hashRate,
+          hashRateFormatted: stats.hashRate >= 1_000_000 ? `${(stats.hashRate / 1_000_000).toFixed(2)} MH/s` : `${(stats.hashRate / 1_000).toFixed(2)} kH/s`,
+          hashesProcessed: stats.hashesProcessed.toString(),
+          elapsedMs: stats.elapsedMs,
+          elapsedSec: ((stats.elapsedMs ?? 0) / 1000).toFixed(2),
+        });
+        this.setHuntingState({
+          miningStats: {
+            hashRate: stats.hashRate,
+            hashesProcessed: stats.hashesProcessed,
+            elapsedMs: stats.elapsedMs ?? 0,
+          },
+        });
+      });
+
+      this.miner.on('found', (result: MineResult) => {
+        this.setHuntingState({
+          miningStatus: 'found',
+          miningResult: {
+            txid: result.txid,
+            psbt: result.psbt,
+            nonce: result.nonce,
+            attempts: result.attempts,
+            duration: result.duration,
+          },
+        });
+      });
+
+      this.miner.on('error', (err: ZeldMinerError) => {
+        console.error('[ZeldWalletController] Mining error event:', err.code, err.message, err);
+        if (err.code === ZeldMinerErrorCode.MINING_ABORTED) {
+          // User stopped mining, don't show as error
+          return;
+        }
+        this.setMiningError(err.message);
+      });
+
+      this.miner.on('stopped', () => {
+        console.log('[ZeldWalletController] miner stopped event', { status: this.state.hunting?.miningStatus });
+        if (this.state.hunting?.miningStatus === 'mining') {
+          this.setHuntingState({ miningStatus: 'idle' });
+        }
+      });
+
+      // Start mining
+      console.log('[ZeldWalletController] Starting mineTransaction with args:', {
+        inputs: minerArgs.inputs,
+        outputs: minerArgs.outputs,
+        targetZeros: minerArgs.targetZeros,
+        distribution: minerArgs.distribution,
+      });
+      await this.miner.mineTransaction({
+        inputs: minerArgs.inputs,
+        outputs: minerArgs.outputs,
+        targetZeros: minerArgs.targetZeros,
+        startNonce: DEFAULT_START_NONCE,
+        distribution: minerArgs.distribution,
+        signal: this.miningAbortController.signal,
+      });
+    } catch (error) {
+      console.error('[ZeldWalletController] Mining catch error:', error);
+      if (error instanceof ZeldMinerError && error.code === ZeldMinerErrorCode.MINING_ABORTED) {
+        // User stopped mining
+        console.log('[ZeldWalletController] Mining aborted by user');
+        return;
+      }
+      const message = error instanceof Error ? error.message : 'Mining failed';
+      this.setMiningError(message);
+    }
+  }
+
+  /**
+   * Pauses the current mining session.
+   */
+  pauseMining(): void {
+    if (this.miner && this.state.hunting?.miningStatus === 'mining') {
+      this.miner.pause();
+      this.setHuntingState({ miningStatus: 'paused' });
+    }
+  }
+
+  /**
+   * Resumes a paused mining session.
+   */
+  async resumeMining(): Promise<void> {
+    if (this.miner && this.state.hunting?.miningStatus === 'paused') {
+      this.setHuntingState({ miningStatus: 'mining' });
+      await this.miner.resume();
+    }
+  }
+
+  /**
+   * Stops the current mining session.
+   */
+  stopMining(): void {
+    console.log('[ZeldWalletController] stopMining called', {
+      hasMiner: Boolean(this.miner),
+      hasAbort: Boolean(this.miningAbortController),
+      currentRunId: this.miningRunId,
+    });
+    // Invalidate any in-flight startHunting run
+    this.miningRunId += 1;
+    if (this.miningAbortController) {
+      console.log('[ZeldWalletController] aborting miningAbortController');
+      this.miningAbortController.abort();
+    }
+    if (this.miner) {
+      console.log('[ZeldWalletController] stopping miner instance');
+      this.miner.stop();
+    }
+    this.setHuntingState({ miningStatus: 'idle', miningStats: undefined });
+  }
+
+  /**
+   * Signs and broadcasts the mined transaction.
+   */
+  async signAndBroadcast(): Promise<void> {
+    const hunting = this.state.hunting;
+    if (!hunting?.miningResult?.psbt) {
+      console.warn('[ZeldWalletController] No PSBT to sign');
+      return;
+    }
+
+    this.setHuntingState({ miningStatus: 'signing' });
+
+    try {
+      // Parse PSBT to determine inputs and their addresses
+      const network = this.getSnapshot().network;
+      const btcNetwork = network === 'mainnet' ? bitcoin.networks.bitcoin : bitcoin.networks.testnet;
+      const psbt = bitcoin.Psbt.fromBase64(hunting.miningResult.psbt);
+      const inputCount = psbt.data.inputs.length;
+
+      // Get our addresses to match inputs
+      const addresses = this.state.addresses ?? [];
+      const paymentAddr = addresses.find((a) => a.purpose === 'payment')?.address;
+      const ordinalsAddr = addresses.find((a) => a.purpose === 'ordinals')?.address;
+      
+      console.log('[signAndBroadcast] Our addresses:', { paymentAddr, ordinalsAddr });
+
+      // Build sign inputs array with addresses extracted from PSBT witness UTXOs
+      const signInputs: Array<{ index: number; address: string }> = [];
+      for (let i = 0; i < inputCount; i++) {
+        const input = psbt.data.inputs[i];
+        let inputAddress: string | undefined;
+
+        // Extract address from witnessUtxo's scriptPubKey
+        if (input.witnessUtxo?.script) {
+          try {
+            inputAddress = bitcoin.address.fromOutputScript(input.witnessUtxo.script, btcNetwork);
+          } catch (err) {
+            console.warn(`[signAndBroadcast] Could not extract address from input ${i}:`, err);
+          }
+        }
+
+        // Fallback: try to match with our known addresses
+        if (!inputAddress) {
+          // If we can't determine the address, use payment address as fallback
+          inputAddress = paymentAddr;
+        }
+
+        if (inputAddress) {
+          signInputs.push({ index: i, address: inputAddress });
+          console.log(`[signAndBroadcast] Input ${i} belongs to address: ${inputAddress}`);
+        } else {
+          console.warn(`[signAndBroadcast] Could not determine address for input ${i}`);
+        }
+      }
+
+      if (signInputs.length === 0) {
+        throw new Error('Could not determine addresses for any PSBT inputs');
+      }
+
+      console.log('[signAndBroadcast] Signing PSBT with inputs:', signInputs);
+
+      // Sign the PSBT using UnifiedWallet
+      const signedPsbt = await UnifiedWallet.signPsbt(hunting.miningResult.psbt, signInputs);
+      
+      console.log('[signAndBroadcast] PSBT signed successfully');
+      
+      // Extract the transaction from the signed PSBT and broadcast
+      const txHex = this.finalizePsbt(signedPsbt);
+      const txid = await this.broadcastTransaction(txHex);
+
+      this.setHuntingState({
+        miningStatus: 'broadcast',
+        broadcastTxid: txid,
+      });
+
+      // Refresh balances after broadcast
+      void this.refreshBalances();
+    } catch (error) {
+      console.error('[signAndBroadcast] Error:', error);
+      
+      // Check if user cancelled the signing - in that case, go back to 'found' state
+      // so they can try again without losing their mined result
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorCode = (error as any)?.code;
+      const isUserCancelled = 
+        errorCode === 'user-cancelled-signing' ||
+        errorCode === 'user-cancelled' ||
+        errorCode === 4001 || // WBIP USER_REJECTED
+        errorMessage.toLowerCase().includes('cancel') ||
+        errorMessage.toLowerCase().includes('rejected') ||
+        errorMessage.toLowerCase().includes('denied');
+      
+      if (isUserCancelled) {
+        console.log('[signAndBroadcast] User cancelled signing, returning to found state');
+        this.setHuntingState({ miningStatus: 'found' });
+      } else {
+        const strings = getStrings(this.locale);
+        const message = error instanceof Error ? error.message : strings.error;
+        this.setMiningError(message);
+      }
+    }
+  }
+
+  /**
+   * Cancels the current mining result and returns to idle state.
+   */
+  cancelMining(): void {
+    this.stopMining();
+    this.setHuntingState({
+      miningStatus: 'idle',
+      miningStats: undefined,
+      miningResult: undefined,
+      miningError: undefined,
+      broadcastTxid: undefined,
+    });
+  }
+
+  /**
+   * Retries mining after an error.
+   */
+  retryMining(): void {
+    this.setHuntingState({
+      miningStatus: 'idle',
+      miningError: undefined,
+    });
+    void this.startHunting();
+  }
+
+  private setHuntingState(partial: Partial<NonNullable<ComponentState['hunting']>>): void {
+    const hunting = this.state.hunting ?? createInitialHuntingState();
+    this.setState({ hunting: { ...hunting, ...partial } });
+  }
+
+  private setMiningError(message: string): void {
+    this.setHuntingState({
+      miningStatus: 'error',
+      miningError: message,
+    });
+  }
+
+  /**
+   * Finalizes a signed PSBT and returns the raw transaction hex.
+   */
+  private finalizePsbt(signedPsbtBase64: string): string {
+    // The signed PSBT should already be finalized by the wallet
+    // We just need to extract the transaction
+    const psbt = bitcoin.Psbt.fromBase64(signedPsbtBase64);
+    
+    // Try to finalize if not already finalized
+    try {
+      psbt.finalizeAllInputs();
+    } catch {
+      // Already finalized, ignore
+    }
+    
+    return psbt.extractTransaction().toHex();
+  }
+
+  /**
+   * Broadcasts a raw transaction to the network.
+   */
+  private async broadcastTransaction(txHex: string): Promise<string> {
+    const url = `${this.electrsUrl.replace(/\/$/, '')}/tx`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: txHex,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Broadcast failed: ${errorText}`);
+    }
+
+    return await response.text(); // Returns the txid
+  }
+
+  /**
+   * Fetches UTXOs for a single address.
+   */
+  private async fetchUtxosForAddress(address: string): Promise<UtxoResponse[]> {
+    try {
+      const url = `${this.electrsUrl.replace(/\/$/, '')}/address/${address}/utxo`;
+      const response = await fetch(url);
+      if (!response.ok) {
+        console.warn(`[ZeldWalletController] Failed to fetch UTXOs for ${address}: ${response.status}`);
+        return [];
+      }
+      return await response.json();
+    } catch (error) {
+      console.warn(`[ZeldWalletController] Error fetching UTXOs for ${address}:`, error);
+      return [];
+    }
+  }
+
+  /**
+   * Fetches ordinals UTXOs and enriches them with ZELD balances from the ZeldHash API.
+   */
+  private async fetchOrdinalsUtxosWithZeld(address: string): Promise<OrdinalsUtxo[]> {
+    const utxos = await this.fetchUtxosForAddress(address);
+
+    const confirmedOutpoints = utxos
+      .filter((u) => u.status.confirmed)
+      .map((u) => `${u.txid}:${u.vout}`);
+
+    if (confirmedOutpoints.length === 0) {
+      // No confirmed UTXOs; return zero ZELD balances.
+      return utxos.map((u) => ({ ...u, zeldBalance: 0 }));
+    }
+
+    const url = `${this.zeldhashApiUrl.replace(/\/$/, '')}/utxos`;
+
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ utxos: confirmedOutpoints }),
+      });
+
+      if (!response.ok) {
+        console.warn(`[ZeldWalletController] Failed to fetch ZELD balances for ${address}: ${response.status}`);
+        return utxos.map((u) => ({ ...u, zeldBalance: 0 }));
+      }
+
+      const balances: Array<{ txid: string; vout: number; balance: number }> = await response.json();
+      const balanceMap = new Map<string, number>(
+        balances.map((b) => [`${b.txid}:${b.vout}`, b.balance ?? 0])
+      );
+
+      return utxos.map((u) => ({
+        ...u,
+        zeldBalance: balanceMap.get(`${u.txid}:${u.vout}`) ?? 0,
+      }));
+    } catch (error) {
+      console.warn(`[ZeldWalletController] Error fetching ZELD balances for ${address}:`, error);
+      return utxos.map((u) => ({ ...u, zeldBalance: 0 }));
     }
   }
 }
