@@ -39,6 +39,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Encrypted backup export/import with separate backup password
   - Network switching (mainnet/testnet)
 
+- **Auto-Lock**
+  - Automatic wallet lock after 5 minutes of idle time when password is configured
+  - Activity detection via mouse, keyboard, touch, and scroll events
+
 ### Security
 
 - AES-256-GCM encryption for wallet data at rest

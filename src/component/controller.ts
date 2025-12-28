@@ -4,7 +4,7 @@ import type { AddressInfo, NetworkType, WalletEvent } from '../types';
 import { isValidBitcoinAddress } from '../utils/validation';
 import { UnifiedWallet } from '../unifiedWallet';
 import { fetchBalances, type UtxoResponse } from './balance';
-import { DEFAULT_ELECTRS_URL, DEFAULT_PROVIDER, DEFAULT_ZELDHASH_API_URL } from './constants';
+import { AUTO_LOCK_TIMEOUT_MS, DEFAULT_ELECTRS_URL, DEFAULT_PROVIDER, DEFAULT_ZELDHASH_API_URL } from './constants';
 import { describeError, isPasswordRequiredError, isWrongPasswordError } from './errors';
 import { getDirection, getStrings, resolveLocale, type LocaleKey, type LocaleStrings, type TextDirection } from './i18n';
 import { createInitialHuntingState, createInitialMnemonicRestoreState, createInitialState, type ComponentState, type FeeMode, type MobileActiveTab, type OpReturnData, type ParsedTransaction, type ParsedTxInput, type ParsedTxOutput, type RecommendedFees } from './state';
@@ -258,6 +258,9 @@ export class ZeldWalletController {
   private miningRunId = 0;
   private lastMiningProgressMs = 0;
   private static readonly MIN_PROGRESS_INTERVAL_MS = 300;
+  // Auto-lock idle timer
+  private autoLockTimeoutId?: ReturnType<typeof setTimeout>;
+  private boundActivityHandler?: () => void;
 
   constructor(options?: ControllerOptions) {
     const discovery: WalletDiscovery = discoverWallets();
@@ -391,6 +394,7 @@ export class ZeldWalletController {
 
   detach(): void {
     this.stopBalanceRefresh();
+    this.stopAutoLockTimer();
     this.resetIntegrationState();
   }
 
@@ -412,6 +416,100 @@ export class ZeldWalletController {
       clearInterval(this.balanceIntervalId);
       this.balanceIntervalId = undefined;
     }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Auto-lock Idle Timer
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Activity events that reset the idle timer
+   */
+  private static readonly ACTIVITY_EVENTS = [
+    'mousedown',
+    'mousemove',
+    'keydown',
+    'touchstart',
+    'scroll',
+    'wheel',
+    'pointerdown',
+  ] as const;
+
+  /**
+   * Start the auto-lock idle timer.
+   * Only active when wallet is ZeldWallet, unlocked, and has a password.
+   */
+  private startAutoLockTimer(): void {
+    // Only for ZeldWallet with password protection
+    if (this.state.walletKind !== 'zeld') return;
+    if (this.state.status !== 'ready') return;
+    if (!this.state.hasPassword) return;
+    if (typeof window === 'undefined') return;
+
+    this.stopAutoLockTimer();
+
+    // Create the activity handler if not already bound
+    if (!this.boundActivityHandler) {
+      this.boundActivityHandler = () => this.resetAutoLockTimer();
+    }
+
+    // Add event listeners for user activity
+    for (const event of ZeldWalletController.ACTIVITY_EVENTS) {
+      window.addEventListener(event, this.boundActivityHandler, { passive: true });
+    }
+
+    // Start the idle timeout
+    this.autoLockTimeoutId = setTimeout(() => {
+      this.performAutoLock();
+    }, AUTO_LOCK_TIMEOUT_MS);
+  }
+
+  /**
+   * Stop the auto-lock idle timer and remove activity listeners.
+   */
+  private stopAutoLockTimer(): void {
+    if (this.autoLockTimeoutId) {
+      clearTimeout(this.autoLockTimeoutId);
+      this.autoLockTimeoutId = undefined;
+    }
+
+    // Remove activity listeners
+    if (this.boundActivityHandler && typeof window !== 'undefined') {
+      for (const event of ZeldWalletController.ACTIVITY_EVENTS) {
+        window.removeEventListener(event, this.boundActivityHandler);
+      }
+    }
+  }
+
+  /**
+   * Reset the auto-lock timer on user activity.
+   */
+  private resetAutoLockTimer(): void {
+    if (!this.autoLockTimeoutId) return;
+    
+    clearTimeout(this.autoLockTimeoutId);
+    this.autoLockTimeoutId = setTimeout(() => {
+      this.performAutoLock();
+    }, AUTO_LOCK_TIMEOUT_MS);
+  }
+
+  /**
+   * Perform the auto-lock after idle timeout.
+   */
+  private performAutoLock(): void {
+    if (this.state.walletKind !== 'zeld') return;
+    if (!ZeldWallet.isUnlocked()) return;
+
+    this.stopAutoLockTimer();
+    ZeldWallet.lock();
+  }
+
+  /**
+   * Public method to notify the controller of user activity.
+   * This can be called by the UI component for shadow DOM events.
+   */
+  notifyActivity(): void {
+    this.resetAutoLockTimer();
   }
 
   private async refreshBalances(): Promise<void> {
@@ -931,6 +1029,10 @@ export class ZeldWalletController {
       });
       this.persistPreferredWallet('zeld', this.preferredNetwork);
       this.startBalanceRefresh();
+      // Start auto-lock timer if password is set
+      if (hasPassword) {
+        this.startAutoLockTimer();
+      }
       // Fetch recommended fees when wallet is ready
       void this.fetchRecommendedFees();
     } catch (error) {
@@ -980,6 +1082,7 @@ export class ZeldWalletController {
         () => {
           if (this.state.walletKind !== 'zeld') return;
           this.stopBalanceRefresh();
+          this.stopAutoLockTimer();
           this.unregisterProvider();
           this.setState({
             status: 'locked',
@@ -1011,6 +1114,10 @@ export class ZeldWalletController {
               backupError: undefined,
             });
             this.startBalanceRefresh();
+            // Start auto-lock timer if password is set
+            if (hasPassword) {
+              this.startAutoLockTimer();
+            }
           })();
         },
       ],

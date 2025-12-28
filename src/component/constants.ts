@@ -23,6 +23,9 @@ export const ORDINALS_ICON = `<svg class="zeldwallet-address-icon" width="24" he
 export const DEFAULT_ELECTRS_URL = 'https://mempool.space/api';
 export const DEFAULT_ZELDHASH_API_URL = 'https://api.zeldhash.com';
 
+// Auto-lock timeout (5 minutes in milliseconds)
+export const AUTO_LOCK_TIMEOUT_MS = 5 * 60 * 1000;
+
 // Gracefully support non-DOM environments (e.g., Node/Vitest) by falling back to
 // a no-op base class. This prevents `ReferenceError: HTMLElement is not defined`
 // when the module is imported outside a browser.

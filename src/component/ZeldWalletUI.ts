@@ -22,6 +22,20 @@ export class ZeldWalletUI extends BaseElement {
   private shadowRootRef?: ShadowRoot;
   private initialVariant: string | null = null;
   private variantApplied = false;
+  private boundActivityHandler?: () => void;
+
+  /**
+   * Activity events that reset the idle timer (for shadow DOM).
+   */
+  private static readonly ACTIVITY_EVENTS = [
+    'mousedown',
+    'mousemove',
+    'keydown',
+    'touchstart',
+    'scroll',
+    'wheel',
+    'pointerdown',
+  ] as const;
 
   private applyVariant(value: string | null): void {
     // Default to dark theme when no variant is specified
@@ -166,11 +180,41 @@ export class ZeldWalletUI extends BaseElement {
     }
     this.render();
     this.controller.maybeAutoconnect();
+    
+    // Set up shadow DOM activity listeners for auto-lock
+    this.setupActivityListeners();
   }
 
   disconnectedCallback(): void {
+    this.teardownActivityListeners();
     this.unsubscribe?.();
     this.controller.detach();
+  }
+
+  /**
+   * Set up activity event listeners on the shadow DOM root.
+   * These events bubble up from the shadow DOM and notify the controller.
+   */
+  private setupActivityListeners(): void {
+    if (!this.shadowRootRef) return;
+    
+    this.boundActivityHandler = () => this.controller.notifyActivity();
+    
+    for (const event of ZeldWalletUI.ACTIVITY_EVENTS) {
+      this.shadowRootRef.addEventListener(event, this.boundActivityHandler, { passive: true });
+    }
+  }
+
+  /**
+   * Remove activity event listeners from the shadow DOM root.
+   */
+  private teardownActivityListeners(): void {
+    if (!this.shadowRootRef || !this.boundActivityHandler) return;
+    
+    for (const event of ZeldWalletUI.ACTIVITY_EVENTS) {
+      this.shadowRootRef.removeEventListener(event, this.boundActivityHandler);
+    }
+    this.boundActivityHandler = undefined;
   }
 
   /**
