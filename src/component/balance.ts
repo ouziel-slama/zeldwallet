@@ -140,19 +140,51 @@ export async function fetchBalances(
 }
 
 /**
- * Formats satoshis to BTC string with 8 decimal places.
+ * Locale to BCP 47 tag mapping for Intl.NumberFormat.
+ * Most locale keys are already valid BCP 47 tags.
  */
-export function formatBtc(sats: number): string {
+function toBcp47Locale(locale?: string): string {
+  if (!locale) return 'en';
+  // Handle our locale keys that are already BCP 47 compliant
+  // 'zh-CN', 'zh-TW' are already correct
+  return locale;
+}
+
+/**
+ * Formats a number with locale-aware thousand separators.
+ * @param value - The number to format
+ * @param decimals - Number of decimal places
+ * @param locale - Locale key (e.g., 'en', 'fr', 'de', 'zh-CN')
+ */
+function formatWithThousandSeparators(value: number, decimals: number, locale?: string): string {
+  const bcp47 = toBcp47Locale(locale);
+  try {
+    return new Intl.NumberFormat(bcp47, {
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals,
+    }).format(value);
+  } catch {
+    // Fallback if locale is not supported
+    return value.toFixed(decimals);
+  }
+}
+
+/**
+ * Formats satoshis to BTC string with 8 decimal places.
+ * Uses locale-aware thousand separators when locale is provided.
+ */
+export function formatBtc(sats: number, locale?: string): string {
   const btc = sats / 100_000_000;
-  return btc.toFixed(8);
+  return formatWithThousandSeparators(btc, 8, locale);
 }
 
 /**
  * Formats ZELD balance (stored in minimal units, 8 decimals).
+ * Uses locale-aware thousand separators when locale is provided.
  */
-export function formatZeld(balance: number): string {
+export function formatZeld(balance: number, locale?: string): string {
   const zeld = balance / 100_000_000;
-  return zeld.toFixed(8);
+  return formatWithThousandSeparators(zeld, 8, locale);
 }
 
 /**

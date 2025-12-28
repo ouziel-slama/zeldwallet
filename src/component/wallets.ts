@@ -1,4 +1,4 @@
-import satsConnect, { AddressPurpose as SatsPurpose, BitcoinNetworkType, getAddress, signMessage as satsSignMessage, signTransaction, MessageSigningProtocols } from 'sats-connect';
+import satsConnect, { AddressPurpose as SatsPurpose, BitcoinNetworkType, getAddress, signMessage as satsSignMessage, signTransaction, MessageSigningProtocols, type BitcoinProvider } from 'sats-connect';
 import type { AddressInfo, AddressType, NetworkType, SignInputOptions } from '../types';
 import { DEFAULT_PROVIDER } from './constants';
 
@@ -146,24 +146,24 @@ const ensureNetworkMatches = (addresses: AddressLike[], expected: NetworkType): 
   return detected ?? expected;
 };
 
-const normalizeResponse = <T>(resp: T): T | (T extends { result: infer R } ? R : unknown) => {
+type JsonRpcResponse = { jsonrpc?: string; error?: unknown; result?: unknown };
+type StatusResponse = { status?: string; error?: unknown; result?: unknown };
+
+const normalizeResponse = <T>(resp: T): T | unknown => {
   if (!resp) return resp;
-  // @ts-expect-error - runtime normalization mirrors demo logic.
-  if (resp.jsonrpc === '2.0') {
-    // @ts-expect-error - runtime shape check
-    if (resp.error) throw resp.error;
-    // @ts-expect-error - runtime shape check
-    return resp.result;
+  const jsonRpc = resp as JsonRpcResponse;
+  if (jsonRpc.jsonrpc === '2.0') {
+    if (jsonRpc.error) throw jsonRpc.error;
+    return jsonRpc.result;
   }
-  // @ts-expect-error - runtime normalization mirrors demo logic.
-  if (resp.status === 'error') throw (resp as any).error ?? resp;
-  // @ts-expect-error - runtime normalization mirrors demo logic.
-  if (resp.status === 'success') return (resp as any).result;
+  const statusResp = resp as StatusResponse;
+  if (statusResp.status === 'error') throw statusResp.error ?? resp;
+  if (statusResp.status === 'success') return statusResp.result;
   return resp;
 };
 
-const getByPath = (root: any, path: string): any =>
-  path.split('.').reduce((acc: any, part: string) => (acc ? acc[part] : undefined), root);
+const getByPath = (root: Record<string, unknown>, path: string): unknown =>
+  path.split('.').reduce((acc: Record<string, unknown> | undefined, part: string) => (acc ? acc[part] as Record<string, unknown> : undefined), root);
 
 const toWalletEntry = (candidate: unknown): WalletEntry | undefined => {
   if (!candidate || typeof candidate !== 'object') return undefined;
@@ -199,7 +199,8 @@ const discoverLeather = (): WalletEntry | undefined => {
 
 const discoverMagicEden = (): WalletEntry | undefined => {
   if (typeof window === 'undefined') return undefined;
-  const provider = (window as any)?.magicEden?.bitcoin;
+  const magicEden = (window as Record<string, unknown>).magicEden as Record<string, unknown> | undefined;
+  const provider = magicEden?.bitcoin;
   if (!provider) {
     return undefined;
   }
@@ -235,7 +236,7 @@ export const discoverWallets = (): WalletDiscovery => {
   addIfMissing(magicEntry);
 
   // Expose merged providers back to sats-connect to avoid "no wallet provider found"
-  (window as any).btc_providers = mergedProviders;
+  (window as Record<string, unknown>).btc_providers = mergedProviders;
 
   const normalizedProviders = mergedProviders
     .map((p) => ({
@@ -279,21 +280,25 @@ export const discoverWallets = (): WalletDiscovery => {
   return { options, entries };
 };
 
-const providerHasInterface = (candidate: unknown): candidate is { request?: unknown; getAddresses?: unknown; connect?: unknown } =>
+type ProviderInterface = { request?: unknown; getAddresses?: unknown; connect?: unknown };
+const providerHasInterface = (candidate: unknown): candidate is ProviderInterface =>
   !!candidate && typeof candidate === 'object';
 
-const buildGetInfoShim = (provider: any): any => {
+type ProviderLike = Record<string, unknown> & { request?: (method: string, params?: unknown) => Promise<unknown>; __zw_getInfoShimmed?: boolean };
+
+const buildGetInfoShim = (provider: ProviderLike | undefined): ProviderLike | undefined => {
   if (!provider || typeof provider.request !== 'function') return provider;
   if (provider.__zw_getInfoShimmed) return provider;
-  const shimmed = {
+  const shimmed: ProviderLike = {
     ...provider,
     request: async (method: string, params?: unknown) => {
-      if (method !== 'getInfo') return provider.request(method, params);
+      if (method !== 'getInfo') return provider.request!(method, params);
       try {
-        return await provider.request(method, params);
-      } catch (err: any) {
-        const code = err?.code;
-        const message = err?.message ?? '';
+        return await provider.request!(method, params);
+      } catch (err: unknown) {
+        const error = err as { code?: number; message?: string };
+        const code = error?.code;
+        const message = error?.message ?? '';
         const unsupported = code === -32601 || message.includes('getInfo');
         if (!unsupported) throw err;
         return {
@@ -309,17 +314,17 @@ const buildGetInfoShim = (provider: any): any => {
   return shimmed;
 };
 
-const resolveProvider = async (entry: WalletEntry): Promise<any> => {
+const resolveProvider = async (entry: WalletEntry): Promise<ProviderLike | undefined> => {
   const candidates = [
     await entry.getProvider?.(),
     entry.provider,
-    typeof window !== 'undefined' ? getByPath(window, entry.id) : undefined,
-    typeof window !== 'undefined' ? getByPath(window, `${entry.id}.provider`) : undefined,
+    typeof window !== 'undefined' ? getByPath(window as unknown as Record<string, unknown>, entry.id) : undefined,
+    typeof window !== 'undefined' ? getByPath(window as unknown as Record<string, unknown>, `${entry.id}.provider`) : undefined,
     (typeof window !== 'undefined' ? (window as Record<string, unknown>)[entry.id] : undefined) as unknown,
     typeof window !== 'undefined' ? (window as Record<string, unknown>)[`${entry.id}.provider`] : undefined,
   ].filter(providerHasInterface);
 
-  const provider = candidates.find(providerHasInterface);
+  const provider = candidates.find(providerHasInterface) as ProviderLike | undefined;
   return buildGetInfoShim(provider);
 };
 
@@ -327,16 +332,16 @@ const connectWith = async (
   entry: WalletEntry,
   network: NetworkType,
   requestMessage: string
-): Promise<{ provider?: unknown; addresses: AddressLike[] }> => {
+): Promise<{ provider?: ProviderLike; addresses: AddressLike[] }> => {
   const provider = await resolveProvider(entry);
-  const requestFn = typeof (provider as any)?.request === 'function' ? (provider as any).request.bind(provider) : undefined;
+  const requestFn = typeof provider?.request === 'function' ? provider.request.bind(provider) : undefined;
   const addressParams = {
     purposes: ['payment', 'ordinals'],
     network: buildNetworkParams(network),
     message: requestMessage,
   };
 
-  const attempts: Array<{ label: string; fn: () => Promise<any> }> = [];
+  const attempts: Array<{ label: string; fn: () => Promise<unknown> }> = [];
 
   const isMagicEden = entry.id.toLowerCase().includes('magic');
   const isXverse = entry.id.toLowerCase().includes('xverse') || entry.name?.toLowerCase?.().includes('xverse');
@@ -348,7 +353,7 @@ const connectWith = async (
       fn: () =>
         new Promise((resolve, reject) => {
           getAddress({
-            getProvider: () => (window as any)?.magicEden?.bitcoin,
+            getProvider: async () => ((window as Record<string, unknown>).magicEden as Record<string, unknown>)?.bitcoin as BitcoinProvider | undefined,
             payload: {
               purposes: [SatsPurpose.Ordinals, SatsPurpose.Payment],
               message: addressParams.message,
@@ -384,49 +389,49 @@ const connectWith = async (
       label: 'request(getAddresses)',
       fn: () => requestFn('getAddresses', addressParams),
     });
-    attempts.push({
-      label: 'request({method:getAddresses})',
-      fn: () => requestFn({ method: 'getAddresses', params: addressParams }),
-    });
+    // Note: Some older wallets might expect JSON-RPC style params with method inside,
+    // but the standard sats-connect requestFn signature is (method: string, params?: unknown).
+    // Skipping non-standard invocation patterns to satisfy TypeScript types.
   }
 
-  if (typeof (provider as any)?.connect === 'function') {
+  const providerWithMethods = provider as ProviderLike & { connect?: (params: unknown) => Promise<unknown>; getAddresses?: (params: unknown) => Promise<unknown> } | undefined;
+  if (typeof providerWithMethods?.connect === 'function') {
     attempts.push({
       label: 'connect+getAddresses',
       fn: async () => {
-        await (provider as any).connect(addressParams);
-        if (typeof (provider as any).getAddresses === 'function') return (provider as any).getAddresses(addressParams);
+        await providerWithMethods.connect!(addressParams);
+        if (typeof providerWithMethods.getAddresses === 'function') return providerWithMethods.getAddresses(addressParams);
         return requestFn?.('getAddresses', addressParams);
       },
     });
   }
 
-  if (typeof (provider as any)?.getAddresses === 'function') {
-    attempts.push({ label: 'provider.getAddresses', fn: () => (provider as any).getAddresses(addressParams) });
+  if (typeof providerWithMethods?.getAddresses === 'function') {
+    attempts.push({ label: 'provider.getAddresses', fn: () => providerWithMethods.getAddresses!(addressParams) });
   }
 
-  const scRequest = (satsConnect as unknown as { request?: (...args: any[]) => Promise<any> }).request;
+  const scRequest = (satsConnect as unknown as { request?: (...args: unknown[]) => Promise<unknown> }).request;
   if (scRequest) {
     attempts.push({
       label: 'satsConnect.request(getAddresses)',
-      fn: () => scRequest.call(satsConnect as any, 'getAddresses', addressParams as any, entry.id, { skipGetInfo: true }),
+      fn: () => scRequest.call(satsConnect, 'getAddresses', addressParams, entry.id, { skipGetInfo: true }),
     });
   }
 
   let lastError: unknown;
   for (const attempt of attempts) {
     try {
-      const result = normalizeResponse(await attempt.fn());
+      const result = normalizeResponse(await attempt.fn()) as { addresses?: AddressLike[] } | AddressLike[] | undefined;
+      const resultWithAddresses = result as { addresses?: AddressLike[] } | undefined;
       const addresses =
-        Array.isArray((result as any)?.addresses) && (result as any).addresses.length
-          ? (result as any).addresses
+        Array.isArray(resultWithAddresses?.addresses) && resultWithAddresses.addresses.length
+          ? resultWithAddresses.addresses
           : Array.isArray(result)
             ? result
             : [];
       return { provider, addresses };
     } catch (err) {
       lastError = err;
-      // eslint-disable-next-line no-console
       console.warn(`[wallets] ${attempt.label} failed`, err);
     }
   }
@@ -458,14 +463,14 @@ export const connectExternalWallet = async (
   console.log('[connectExternalWallet] After connectWith:', {
     hasProvider: !!provider,
     providerType: typeof provider,
-    hasRequest: typeof (provider as any)?.request === 'function',
+    hasRequest: typeof provider?.request === 'function',
     addressCount: addresses.length,
   });
   
   const normalized = normalizeAddresses(addresses, network);
   const sessionNetwork = ensureNetworkMatches(normalized.list, network);
 
-  const scRequest = (satsConnect as unknown as { request?: (...args: any[]) => Promise<any> }).request;
+  const scRequest = (satsConnect as unknown as { request?: (...args: unknown[]) => Promise<unknown> }).request;
   console.log('[connectExternalWallet] satsConnect.request available:', !!scRequest);
 
   const isMagicEden = walletId === 'magicEden';
@@ -479,12 +484,12 @@ export const connectExternalWallet = async (
     console.log('[signMessage] Provider state:', {
       hasProvider: !!provider,
       providerType: typeof provider,
-      hasRequest: typeof (provider as any)?.request === 'function',
+      hasRequest: typeof provider?.request === 'function',
       entryId: entry.id,
       isMagicEden,
     });
     
-    const requestFn = typeof (provider as any)?.request === 'function' ? (provider as any).request.bind(provider) : undefined;
+    const requestFn = typeof provider?.request === 'function' ? provider.request.bind(provider) : undefined;
     console.log('[signMessage] requestFn resolved:', !!requestFn);
     
     // External wallets (Xverse, etc.) expect uppercase: "ECDSA" or "BIP322"
@@ -496,7 +501,7 @@ export const connectExternalWallet = async (
       console.log('[signMessage] Using satsSignMessage with getProvider for Magic Eden');
       return new Promise((resolve, reject) => {
         satsSignMessage({
-          getProvider: () => (window as any)?.magicEden?.bitcoin,
+          getProvider: async () => ((window as Record<string, unknown>).magicEden as Record<string, unknown>)?.bitcoin as BitcoinProvider | undefined,
           payload: {
             address,
             message,
@@ -505,7 +510,7 @@ export const connectExternalWallet = async (
           },
           onFinish: (response) => {
             console.log('[signMessage] Magic Eden signMessage response:', response);
-            resolve(typeof response === 'string' ? response : (response as any)?.signature ?? JSON.stringify(response));
+            resolve(typeof response === 'string' ? response : (response as { signature?: string })?.signature ?? JSON.stringify(response));
           },
           onCancel: () => reject(codedError('User cancelled signing.', 'user-cancelled-signing')),
         });
@@ -514,23 +519,24 @@ export const connectExternalWallet = async (
     
     if (requestFn) {
       console.log('[signMessage] Using provider.request directly');
-      const resp = normalizeResponse(await requestFn('signMessage', params));
+      const resp = normalizeResponse(await requestFn('signMessage', params)) as { signature?: string } | string;
       if (typeof resp === 'string') return resp;
-      return (resp as any)?.signature ?? JSON.stringify(resp);
+      return (resp as { signature?: string })?.signature ?? JSON.stringify(resp);
     }
     
     console.log('[signMessage] scRequest available:', !!scRequest);
     if (scRequest) {
       console.log('[signMessage] Using satsConnect.request with entry.id:', entry.id);
-      const resp = normalizeResponse(await scRequest.call(satsConnect as any, 'signMessage', params as any, entry.id, { skipGetInfo: true }));
+      const resp = normalizeResponse(await scRequest.call(satsConnect, 'signMessage', params, entry.id, { skipGetInfo: true })) as { signature?: string } | string;
       if (typeof resp === 'string') return resp;
-      return (resp as any)?.signature ?? JSON.stringify(resp);
+      return (resp as { signature?: string })?.signature ?? JSON.stringify(resp);
     }
     
     console.log('[signMessage] Fallback to satsConnect.request (no scRequest)');
-    const resp = normalizeResponse(await (satsConnect as any).request('signMessage', params as any, entry.id, { skipGetInfo: true }));
+    const satsConnectWithRequest = satsConnect as unknown as { request: (...args: unknown[]) => Promise<unknown> };
+    const resp = normalizeResponse(await satsConnectWithRequest.request('signMessage', params, entry.id, { skipGetInfo: true })) as { signature?: string } | string;
     if (typeof resp === 'string') return resp;
-    return (resp as any)?.signature ?? JSON.stringify(resp);
+    return (resp as { signature?: string })?.signature ?? JSON.stringify(resp);
   };
 
   const signPsbt = async (psbtBase64: string, inputs: SignInputOptions[]): Promise<string> => {
@@ -551,7 +557,7 @@ export const connectExternalWallet = async (
     
     console.log('[signPsbt] Converted signInputs to map format:', signInputsMap);
     
-    const requestFn = typeof (provider as any)?.request === 'function' ? (provider as any).request.bind(provider) : undefined;
+    const requestFn = typeof provider?.request === 'function' ? provider.request.bind(provider) : undefined;
     
     // Build inputsToSign array for sats-connect signTransaction
     const inputsToSign = Object.entries(signInputsMap).map(([address, signingIndexes]) => ({
@@ -591,16 +597,18 @@ export const connectExternalWallet = async (
           }
           return resp;
         }
-        const hexResult = (resp as any)?.hex ?? (resp as any)?.psbt ?? (resp as any)?.psbtBase64;
+        const respObj = resp as { hex?: string; psbt?: string; psbtBase64?: string };
+        const hexResult = respObj?.hex ?? respObj?.psbt ?? respObj?.psbtBase64;
         if (hexResult && /^[0-9a-fA-F]+$/.test(hexResult)) {
           return Buffer.from(hexResult, 'hex').toString('base64');
         }
         return hexResult ?? JSON.stringify(resp);
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error('[signPsbt] Leather error:', err);
         // Check if user cancelled
-        const errorMessage = err?.message ?? String(err);
-        const errorCode = err?.code ?? err?.error?.code;
+        const error = err as { message?: string; code?: number; error?: { code?: number } };
+        const errorMessage = error?.message ?? String(err);
+        const errorCode = error?.code ?? error?.error?.code;
         if (errorCode === 4001 || errorMessage.toLowerCase().includes('cancel') || errorMessage.toLowerCase().includes('denied')) {
           throw codedError('User cancelled signing.', 'user-cancelled-signing');
         }
@@ -615,8 +623,8 @@ export const connectExternalWallet = async (
       
       // Determine the getProvider function based on wallet type
       const getProviderFn = isMagicEden 
-        ? () => (window as any)?.magicEden?.bitcoin
-        : () => provider; // For Xverse, use the provider we already have
+        ? async () => ((window as Record<string, unknown>).magicEden as Record<string, unknown>)?.bitcoin as BitcoinProvider | undefined
+        : async () => provider as BitcoinProvider | undefined; // For Xverse, use the provider we already have
       
       return new Promise((resolve, reject) => {
         signTransaction({
@@ -628,7 +636,7 @@ export const connectExternalWallet = async (
             inputsToSign,
             broadcast: false,
           },
-          onFinish: (response: any) => {
+          onFinish: (response: string | { psbtBase64?: string }) => {
             console.log('[signPsbt] signTransaction response:', response);
             resolve(typeof response === 'string' ? response : response?.psbtBase64 ?? JSON.stringify(response));
           },
@@ -637,24 +645,26 @@ export const connectExternalWallet = async (
       });
     }
     
+    type PsbtResponse = { psbt?: string; psbtBase64?: string } | string;
+    
     // For other wallets: try provider.request directly
     if (requestFn) {
       console.log('[signPsbt] Using provider.request directly');
       const params = { psbt: psbtBase64, signInputs: signInputsMap, broadcast: false };
-      const resp = normalizeResponse(await requestFn('signPsbt', params));
+      const resp = normalizeResponse(await requestFn('signPsbt', params)) as PsbtResponse;
       console.log('[signPsbt] provider.request response:', resp);
       if (typeof resp === 'string') return resp;
-      return (resp as any)?.psbt ?? (resp as any)?.psbtBase64 ?? JSON.stringify(resp);
+      return (resp as { psbt?: string; psbtBase64?: string })?.psbt ?? (resp as { psbt?: string; psbtBase64?: string })?.psbtBase64 ?? JSON.stringify(resp);
     }
     
     // Fallback to sats-connect request
     console.log('[signPsbt] Using sats-connect.request fallback');
     const params = { psbt: psbtBase64, signInputs: signInputsMap, broadcast: false };
     if (scRequest) {
-      const resp = normalizeResponse(await scRequest.call(satsConnect as any, 'signPsbt', params as any, entry.id, { skipGetInfo: true }));
+      const resp = normalizeResponse(await scRequest.call(satsConnect, 'signPsbt', params, entry.id, { skipGetInfo: true })) as PsbtResponse;
       console.log('[signPsbt] sats-connect response:', resp);
       if (typeof resp === 'string') return resp;
-      return (resp as any)?.psbt ?? (resp as any)?.psbtBase64 ?? JSON.stringify(resp);
+      return (resp as { psbt?: string; psbtBase64?: string })?.psbt ?? (resp as { psbt?: string; psbtBase64?: string })?.psbtBase64 ?? JSON.stringify(resp);
     }
     
     throw codedError('No wallet provider found for signing', 'wallet-no-provider');

@@ -1,6 +1,6 @@
 import type { NetworkType } from '../types';
 import { formatBtc, formatZeld, truncateAddress } from './balance';
-import { BITCOIN_ICON, DUST, MIN_FEE_RESERVE, ORDINALS_ICON } from './constants';
+import { BITCOIN_ICON, ORDINALS_ICON } from './constants';
 import type { LocaleStrings, TextDirection } from './i18n';
 import type { ComponentState, FeeMode } from './state';
 import { FALLBACK_ICON, type SupportedWalletId } from './wallets';
@@ -10,12 +10,13 @@ export type RenderTemplateProps = {
   network: NetworkType;
   dir: TextDirection;
   strings: LocaleStrings;
+  locale: string;
   showPasswordWarning: boolean;
   showBackupWarning: boolean;
   readyWithSecurity: boolean;
 };
 
-export type ActionKind = 'new-backup' | 'change-password';
+export type ActionKind = 'new-backup' | 'change-password' | 'restore';
 
 export type ActionView = {
   kind: ActionKind;
@@ -56,6 +57,38 @@ export type BackupFormView = {
   error?: string;
 };
 
+export type RestoreMode = 'backup' | 'mnemonic';
+
+export type RestoreFormView = {
+  // Mode toggle
+  mode: RestoreMode;
+  modeBackupLabel: string;
+  modeMnemonicLabel: string;
+  // Backup mode fields
+  backupPlaceholder: string;
+  passwordPlaceholder: string;
+  // Mnemonic mode fields
+  mnemonicPlaceholder: string;
+  mnemonic: string;
+  newPasswordPlaceholder: string;
+  confirmPasswordPlaceholder: string;
+  password: string;
+  confirmPassword: string;
+  // Advanced options (derivation paths)
+  advancedOptionsLabel: string;
+  showAdvanced: boolean;
+  paymentPathLabel: string;
+  paymentPathPlaceholder: string;
+  paymentPath: string;
+  ordinalsPathLabel: string;
+  ordinalsPathPlaceholder: string;
+  ordinalsPath: string;
+  // Common
+  submitLabel: string;
+  cancelLabel: string;
+  error?: string;
+};
+
 export type BackupResultView = {
   value: string;
   title: string;
@@ -88,6 +121,7 @@ export type BalanceView = {
 export type ReadyView = {
   readyLabel: string;
   readyHint: string;
+  balancesHint: string;
   rows: ReadyRowView[];
   networkLabel: string;
   network: NetworkType;
@@ -153,6 +187,8 @@ export type ConfirmDialogInputView = {
   addressTruncated: string;
   valueFormatted: string;
   valueSats: number;
+  /** ZELD amount for this input (in minimal units, 8 decimals) */
+  zeldAmount?: bigint;
 };
 
 /** Output row for confirmation dialog */
@@ -164,8 +200,10 @@ export type ConfirmDialogOutputView = {
   isChange: boolean;
   /** Whether this is an OP_RETURN output */
   isOpReturn: boolean;
-  /** Formatted OP_RETURN display string (e.g., "OP_RETURN: 12345" or "OP_RETURN: ZELD [600, 300, 100]") */
+  /** Formatted OP_RETURN display string (e.g., "OP_RETURN: 12345" or "OP_RETURN: ZELD") */
   opReturnDisplay?: string;
+  /** ZELD amount for this output (from distribution) */
+  zeldAmount?: bigint;
 };
 
 /** Confirmation dialog view */
@@ -178,6 +216,7 @@ export type ConfirmDialogView = {
   totalLabel: string;
   confirmLabel: string;
   cancelLabel: string;
+  closeLabel: string;
   changeLabel: string;
   inputs: ConfirmDialogInputView[];
   outputs: ConfirmDialogOutputView[];
@@ -185,6 +224,12 @@ export type ConfirmDialogView = {
   feeSats: number;
   totalInputFormatted: string;
   totalOutputFormatted: string;
+  /** True when the transaction has been successfully broadcast */
+  isBroadcast: boolean;
+  /** Mempool URL for viewing the broadcast transaction */
+  mempoolUrl?: string;
+  /** Label for the mempool link */
+  viewOnMempoolLabel?: string;
 };
 
 /** Fee option for the selector */
@@ -260,6 +305,7 @@ export type WalletViewModel = {
   setPasswordForm?: SetPasswordFormView;
   backupForm?: BackupFormView;
   backupResult?: BackupResultView;
+  restoreForm?: RestoreFormView;
   ready?: ReadyView;
   hunting?: HuntingView;
   walletSwitcher: WalletSwitcherView;
@@ -288,49 +334,81 @@ const sanitizeWalletIcon = (icon?: string): string => {
   return FALLBACK_ICON;
 };
 
-const makeAction = (kind: ActionKind, strings: LocaleStrings): ActionView =>
-  kind === 'new-backup'
-    ? {
+const makeAction = (kind: ActionKind, strings: LocaleStrings): ActionView => {
+  switch (kind) {
+    case 'new-backup':
+      return {
         kind,
         label: strings.newBackupHint,
         icon: '🛟',
         className: 'zeldwallet-icon-button zeldwallet-backup-button zeldwallet-new-backup-button',
-      }
-    : {
+      };
+    case 'change-password':
+      return {
         kind,
         label: strings.changePasswordHint,
         icon: '🔑',
         className: 'zeldwallet-icon-button zeldwallet-change-password-button',
       };
+    case 'restore':
+      return {
+        kind,
+        label: strings.restoreWalletHint,
+        icon: '📥',
+        className: 'zeldwallet-icon-button zeldwallet-restore-button',
+      };
+  }
+};
 
 export const buildViewModel = ({
   state,
   network,
   strings,
+  locale,
   showBackupWarning,
   showPasswordWarning,
   readyWithSecurity,
 }: RenderTemplateProps): WalletViewModel => {
   const isExternal = state.walletKind === 'external';
   const warnings: InlineWarningView[] = [];
+  
+  // Build restore action (always available for ZeldWallet)
+  const restoreAction = !isExternal ? makeAction('restore', strings) : null;
+  
   if (showPasswordWarning && !isExternal) {
+    // Show password warning with change-password action + restore button
+    const warningActions = [makeAction('change-password', strings)];
+    if (restoreAction) warningActions.push(restoreAction);
     warnings.push({
       type: 'password',
       tooltip: strings.setPasswordHint,
       ariaLabel: strings.noPasswordTitle,
-      actions: [makeAction('change-password', strings)],
+      actions: warningActions,
     });
   } else if (showBackupWarning && !isExternal) {
+    // Show backup warning with backup + change-password actions + restore button
+    const warningActions = [makeAction('new-backup', strings), makeAction('change-password', strings)];
+    if (restoreAction) warningActions.push(restoreAction);
     warnings.push({
       type: 'backup',
       tooltip: strings.backupHint,
       ariaLabel: strings.noBackupTitle,
-      actions: [makeAction('new-backup', strings), makeAction('change-password', strings)],
+      actions: warningActions,
     });
   }
 
-  const actions =
-    readyWithSecurity && !isExternal ? [makeAction('new-backup', strings), makeAction('change-password', strings)] : [];
+  // Build header actions:
+  // - Backup and change password only show when ready with security
+  // - Restore button is always visible when ZeldWallet is selected (even if not connected/no wallet)
+  // - Restore appears on the right side of other buttons
+  const actions: ActionView[] = [];
+  if (readyWithSecurity && !isExternal) {
+    actions.push(makeAction('new-backup', strings), makeAction('change-password', strings));
+  }
+  if (restoreAction) {
+    // Restore is always available for ZeldWallet
+    actions.push(restoreAction);
+  }
 
   const status: StatusView | undefined =
     state.status === 'loading'
@@ -385,6 +463,39 @@ export const buildViewModel = ({
         }
       : undefined;
 
+  const mnemonicState = state.mnemonicRestoreState;
+  const restoreForm: RestoreFormView | undefined = state.showRestoreForm && !isExternal
+    ? {
+        // Mode toggle
+        mode: state.restoreMode ?? 'backup',
+        modeBackupLabel: strings.restoreModeBackup,
+        modeMnemonicLabel: strings.restoreModeMnemonic,
+        // Backup mode fields
+        backupPlaceholder: strings.restoreBackupPlaceholder,
+        passwordPlaceholder: strings.restorePasswordPlaceholder,
+        // Mnemonic mode fields
+        mnemonicPlaceholder: strings.restoreMnemonicPlaceholder,
+        mnemonic: mnemonicState?.mnemonic ?? '',
+        newPasswordPlaceholder: strings.restoreNewPasswordPlaceholder,
+        confirmPasswordPlaceholder: strings.restoreConfirmPasswordPlaceholder,
+        password: mnemonicState?.password ?? '',
+        confirmPassword: mnemonicState?.confirmPassword ?? '',
+        // Advanced options
+        advancedOptionsLabel: strings.restoreAdvancedOptions,
+        showAdvanced: mnemonicState?.showAdvanced ?? false,
+        paymentPathLabel: strings.restorePaymentPathLabel,
+        paymentPathPlaceholder: strings.restorePaymentPathPlaceholder,
+        paymentPath: mnemonicState?.paymentDerivationPath ?? strings.restorePaymentPathPlaceholder,
+        ordinalsPathLabel: strings.restoreOrdinalsPathLabel,
+        ordinalsPathPlaceholder: strings.restoreOrdinalsPathPlaceholder,
+        ordinalsPath: mnemonicState?.ordinalsDerivationPath ?? strings.restoreOrdinalsPathPlaceholder,
+        // Common
+        submitLabel: strings.restoreSubmit,
+        cancelLabel: strings.restoreCancel,
+        error: state.restoreError,
+      }
+    : undefined;
+
   const addresses = state.addresses ?? [];
   const payment = addresses.find((a) => a.purpose === 'payment');
   const ordinals = addresses.find((a) => a.purpose === 'ordinals');
@@ -392,8 +503,8 @@ export const buildViewModel = ({
   // Format balance for display
   const balanceView: BalanceView | undefined = state.balance
     ? {
-        btcFormatted: formatBtc(state.balance.btcSats),
-        zeldFormatted: formatZeld(state.balance.zeldBalance),
+        btcFormatted: formatBtc(state.balance.btcSats, locale),
+        zeldFormatted: formatZeld(state.balance.zeldBalance, locale),
         loading: state.balance.loading,
         error: state.balance.error,
       }
@@ -413,6 +524,7 @@ export const buildViewModel = ({
       ? {
           readyLabel: strings.ready,
           readyHint: strings.readyHint,
+          balancesHint: strings.balancesHint,
           rows: [
             {
               label: strings.paymentLabel,
@@ -468,7 +580,7 @@ export const buildViewModel = ({
   const titleIcon = sanitizeWalletIcon(activeOption?.icon);
 
   // Build hunting view
-  const hunting = buildHuntingView(state, strings);
+  const hunting = buildHuntingView(state, strings, locale);
 
   return {
     title: state.activeWalletName || strings.title,
@@ -480,6 +592,7 @@ export const buildViewModel = ({
     setPasswordForm,
     backupForm,
     backupResult,
+    restoreForm,
     ready,
     hunting,
     walletSwitcher,
@@ -509,7 +622,7 @@ function getCurrentFeeDisplay(
 /**
  * Builds the hunting section view model.
  */
-function buildHuntingView(state: ComponentState, strings: LocaleStrings): HuntingView | undefined {
+function buildHuntingView(state: ComponentState, strings: LocaleStrings, locale: string): HuntingView | undefined {
   // Only show hunting section when wallet is ready
   if (state.status !== 'ready') {
     return undefined;
@@ -520,17 +633,12 @@ function buildHuntingView(state: ComponentState, strings: LocaleStrings): Huntin
     return undefined;
   }
 
-  const btcPaymentSats = state.balance?.btcPaymentSats ?? state.balance?.btcSats ?? 0;
-  const btcTotalSats = state.balance?.btcSats ?? 0;
+  const btcSats = state.balance?.btcSats ?? 0;
   const zeldBalance = state.balance?.zeldBalance ?? 0;
 
-  // Thresholds
-  const simpleHuntThreshold = DUST + MIN_FEE_RESERVE; // 1830 sats
-  const zeldHuntThreshold = 2 * DUST + MIN_FEE_RESERVE; // 2160 sats
-
-  // Enable conditions for checkboxes
-  const sendBtcEnabled = btcPaymentSats >= simpleHuntThreshold;
-  const sendZeldEnabled = zeldBalance > 0 && btcTotalSats >= zeldHuntThreshold;
+  // Simplified enable conditions - let zeldhash-miner handle insufficient balance errors
+  const sendBtcEnabled = btcSats > 0;
+  const sendZeldEnabled = btcSats > 0 && zeldBalance > 0;
 
   // Determine which send fields to show
   const showSendFields = hunting.sendBtcChecked || hunting.sendZeldChecked;
@@ -539,14 +647,14 @@ function buildHuntingView(state: ComponentState, strings: LocaleStrings): Huntin
   // Calculate hunt button enabled state and reason
   const { huntEnabled, huntDisabledReason } = computeHuntEnabled(
     hunting,
-    btcPaymentSats,
-    btcTotalSats,
+    btcSats,
     zeldBalance,
     strings
   );
 
   // Build mining state views
-  const isMining = hunting.miningStatus !== 'idle';
+  // Note: 'error' status is NOT mining - we want to show the error UI, not mining UI
+  const isMining = hunting.miningStatus === 'mining' || hunting.miningStatus === 'paused';
   const miningProgress = buildMiningProgressView(hunting, strings);
   const miningResult = buildMiningResultView(hunting, strings);
   
@@ -637,7 +745,7 @@ function buildHuntingView(state: ComponentState, strings: LocaleStrings): Huntin
     miningStatusMessage,
     retryLabel: strings.miningRetry,
     cancelLabel: strings.miningCancel,
-    confirmDialog: buildConfirmDialogView(hunting, strings),
+    confirmDialog: buildConfirmDialogView(hunting, strings, locale),
   };
 }
 
@@ -646,7 +754,8 @@ function buildHuntingView(state: ComponentState, strings: LocaleStrings): Huntin
  */
 function buildConfirmDialogView(
   hunting: NonNullable<ComponentState['hunting']>,
-  strings: LocaleStrings
+  strings: LocaleStrings,
+  locale: string
 ): ConfirmDialogView | undefined {
   if (!hunting.showConfirmDialog || !hunting.parsedTransaction) {
     return undefined;
@@ -659,37 +768,75 @@ function buildConfirmDialogView(
     vout: input.vout,
     address: input.address,
     addressTruncated: truncateAddress(input.address),
-    valueFormatted: formatBtc(input.value),
+    valueFormatted: formatBtc(input.value, locale),
     valueSats: input.value,
+    zeldAmount: input.zeldBalance !== undefined && input.zeldBalance > 0 
+      ? BigInt(input.zeldBalance) 
+      : undefined,
   }));
 
-  const outputs: ConfirmDialogOutputView[] = tx.outputs.map((output) => {
+  // Find ZELD distribution from OP_RETURN output (if any)
+  const opReturnOutput = tx.outputs.find((o) => o.opReturn?.type === 'zeld');
+  const zeldDistribution = opReturnOutput?.opReturn?.distribution;
+  
+  // Count non-OP_RETURN outputs to match distribution
+  const nonOpReturnOutputs = tx.outputs.filter((o) => !o.opReturn);
+  const nonOpReturnCount = nonOpReturnOutputs.length;
+  
+  // Find the index of the last non-OP_RETURN output
+  let lastNonOpReturnIndex = -1;
+  for (let i = tx.outputs.length - 1; i >= 0; i--) {
+    if (!tx.outputs[i].opReturn) {
+      lastNonOpReturnIndex = i;
+      break;
+    }
+  }
+
+  // Track non-OP_RETURN output index for distribution mapping
+  let nonOpReturnIdx = 0;
+
+  const outputs: ConfirmDialogOutputView[] = tx.outputs.map((output, idx) => {
     const isOpReturn = !!output.opReturn;
     let opReturnDisplay: string | undefined;
+    let zeldAmount: bigint | undefined;
     
     if (output.opReturn) {
       if (output.opReturn.type === 'zeld' && output.opReturn.distribution) {
-        // ZELD distribution: show amounts (last element is the nonce, so exclude it)
-        const amounts = output.opReturn.distribution.slice(0, -1);
-        opReturnDisplay = `OP_RETURN: ZELD [${amounts.join(', ')}]`;
+        // ZELD distribution OP_RETURN - show full array including nonce
+        opReturnDisplay = `OP_RETURN: ZELD [${output.opReturn.distribution.join(', ')}]`;
       } else if (output.opReturn.type === 'nonce' && output.opReturn.nonce !== undefined) {
         // Simple nonce
         opReturnDisplay = `OP_RETURN: ${output.opReturn.nonce.toString()}`;
       } else {
         opReturnDisplay = 'OP_RETURN';
       }
+    } else {
+      // For non-OP_RETURN outputs, get the ZELD amount from distribution
+      // The distribution array has distribution amounts + nonce as last element
+      // We need to take only the first N elements where N = number of non-OP_RETURN outputs
+      if (zeldDistribution && nonOpReturnIdx < nonOpReturnCount && nonOpReturnIdx < zeldDistribution.length) {
+        zeldAmount = zeldDistribution[nonOpReturnIdx];
+      }
+      nonOpReturnIdx++;
     }
+    
+    // Only mark the last non-OP_RETURN output as change
+    const isChange = idx === lastNonOpReturnIndex;
     
     return {
       address: output.address,
       addressTruncated: isOpReturn ? (opReturnDisplay ?? 'OP_RETURN') : truncateAddress(output.address),
-      valueFormatted: formatBtc(output.value),
+      valueFormatted: formatBtc(output.value, locale),
       valueSats: output.value,
-      isChange: output.isChange ?? false,
+      isChange,
       isOpReturn,
       opReturnDisplay,
+      zeldAmount,
     };
   });
+
+  const isBroadcast = hunting.miningStatus === 'broadcast';
+  const broadcastTxid = hunting.broadcastTxid;
 
   return {
     visible: true,
@@ -700,82 +847,72 @@ function buildConfirmDialogView(
     totalLabel: strings.confirmDialogTotalLabel,
     confirmLabel: strings.confirmDialogConfirm,
     cancelLabel: strings.confirmDialogCancel,
+    closeLabel: strings.confirmDialogClose,
     changeLabel: strings.confirmDialogChangeLabel,
     inputs,
     outputs,
-    feeFormatted: formatBtc(tx.fee),
+    feeFormatted: formatBtc(tx.fee, locale),
     feeSats: tx.fee,
-    totalInputFormatted: formatBtc(tx.totalInputValue),
-    totalOutputFormatted: formatBtc(tx.totalOutputValue),
+    totalInputFormatted: formatBtc(tx.totalInputValue, locale),
+    totalOutputFormatted: formatBtc(tx.totalOutputValue, locale),
+    isBroadcast,
+    mempoolUrl: broadcastTxid ? `https://mempool.space/tx/${broadcastTxid}` : undefined,
+    viewOnMempoolLabel: strings.miningViewOnMempool,
   };
 }
 
 /**
  * Computes whether the Hunt button should be enabled and the reason if disabled.
+ * Simplified: only basic checks here, let zeldhash-miner handle insufficient balance errors.
  */
 function computeHuntEnabled(
   hunting: NonNullable<ComponentState['hunting']>,
-  btcPaymentSats: number,
-  btcTotalSats: number,
+  btcSats: number,
   zeldBalance: number,
   strings: LocaleStrings
 ): { huntEnabled: boolean; huntDisabledReason?: string } {
-  const simpleHuntThreshold = DUST + MIN_FEE_RESERVE; // 1830 sats
-  const zeldHuntThreshold = 2 * DUST + MIN_FEE_RESERVE; // 2160 sats
-
-  // Case 1: Simple hunt (no checkboxes checked)
+  // Case 1: Simple hunt (no checkboxes checked) - just need some BTC
   if (!hunting.sendBtcChecked && !hunting.sendZeldChecked) {
-    if (btcPaymentSats < simpleHuntThreshold) {
+    if (btcSats <= 0) {
       return { huntEnabled: false, huntDisabledReason: strings.huntingDisabledNoBtc };
     }
     return { huntEnabled: true };
   }
 
-  // Case 2: Send BTC checked
+  // Case 2: Send BTC checked - need BTC > 0 and valid address/amount
   if (hunting.sendBtcChecked) {
+    if (btcSats <= 0) {
+      return { huntEnabled: false, huntDisabledReason: strings.huntingDisabledNoBtc };
+    }
     // Need valid address
     if (!hunting.recipientAddress.trim() || hunting.addressError) {
       return { huntEnabled: false, huntDisabledReason: strings.huntingDisabledInvalidAddress };
     }
-    
-    // Need valid amount
+    // Need valid amount format (actual balance check done by miner)
     const amountSats = parseBtcAmount(hunting.amount);
     if (amountSats <= 0 || hunting.amountError) {
       return { huntEnabled: false, huntDisabledReason: strings.huntingDisabledInvalidAmount };
     }
-
-    // Need enough BTC: amount + DUST + MIN_FEE_RESERVE
-    const requiredSats = amountSats + DUST + MIN_FEE_RESERVE;
-    if (btcPaymentSats < requiredSats) {
-      return { huntEnabled: false, huntDisabledReason: strings.huntingDisabledInsufficientBtc };
-    }
-
     return { huntEnabled: true };
   }
 
-  // Case 3: Send Zeld checked
+  // Case 3: Send ZELD checked - need BTC > 0, ZELD > 0, and valid address/amount
   if (hunting.sendZeldChecked) {
+    if (btcSats <= 0) {
+      return { huntEnabled: false, huntDisabledReason: strings.huntingDisabledNoBtc };
+    }
+    if (zeldBalance <= 0) {
+      return { huntEnabled: false, huntDisabledReason: strings.huntingDisabledInsufficientZeld };
+    }
     // Need valid address
     if (!hunting.recipientAddress.trim() || hunting.addressError) {
       return { huntEnabled: false, huntDisabledReason: strings.huntingDisabledInvalidAddress };
     }
-
-    // Need valid amount
+    // Need valid amount format (actual balance check done by miner)
     const amountZeld = parseZeldAmount(hunting.amount);
     if (amountZeld <= 0 || hunting.amountError) {
       return { huntEnabled: false, huntDisabledReason: strings.huntingDisabledInvalidAmount };
     }
-
-    // Need enough ZELD
-    if (zeldBalance < amountZeld) {
-      return { huntEnabled: false, huntDisabledReason: strings.huntingDisabledInsufficientZeld };
-    }
-
-    // Need enough BTC for 2 outputs + fees
-    if (btcTotalSats < zeldHuntThreshold) {
-      return { huntEnabled: false, huntDisabledReason: strings.huntingDisabledInsufficientBtc };
-    }
-
     return { huntEnabled: true };
   }
 
@@ -917,7 +1054,7 @@ function buildMiningResultView(
     mempoolUrl,
     viewOnMempoolLabel: strings.miningViewOnMempool,
     retryLabel: strings.miningRetry,
-    cancelLabel: strings.miningCancel,
+    cancelLabel: showMempoolLink ? strings.confirmDialogClose : strings.miningCancel,
     showSignButton: hunting.miningStatus === 'found',
     showMempoolLink,
   };

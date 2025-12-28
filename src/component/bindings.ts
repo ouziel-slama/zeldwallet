@@ -1,4 +1,5 @@
 import { COPY_ICON, COPIED_ICON } from './render';
+import type { MobileActiveTab } from './state';
 
 type Strings = Record<string, string> & { backupFilename?: string };
 
@@ -206,6 +207,172 @@ export const bindWalletSwitcher = (shadowRoot: ShadowRoot, handlers: WalletSwitc
   }
 };
 
+export type RestoreMode = 'backup' | 'mnemonic';
+
+export type MnemonicRestoreData = {
+  mnemonic: string;
+  password: string;
+  confirmPassword: string;
+  paymentPath: string;
+  ordinalsPath: string;
+};
+
+export type MnemonicFormValues = {
+  mnemonic: string;
+  password: string;
+  confirmPassword: string;
+  paymentPath: string;
+  ordinalsPath: string;
+};
+
+type RestoreHandlers = {
+  onShowForm: () => void;
+  onSubmitBackup: (backupString: string, password: string) => void;
+  onSubmitMnemonic: (data: MnemonicRestoreData) => void;
+  onCancel: () => void;
+  onModeChange: (mode: RestoreMode) => void;
+  onToggleAdvanced: (currentValues: MnemonicFormValues) => void;
+  onInputChange: (values: Partial<MnemonicFormValues>) => void;
+};
+
+export const bindRestoreActions = (shadowRoot: ShadowRoot, handlers: RestoreHandlers): void => {
+  // Restore button in header
+  const restoreButtons = Array.from(shadowRoot.querySelectorAll<HTMLButtonElement>('.zeldwallet-restore-button'));
+  for (const button of restoreButtons) {
+    button.addEventListener('click', () => {
+      handlers.onShowForm();
+    });
+  }
+
+  // Restore form
+  const form = shadowRoot.querySelector<HTMLFormElement>('.zeldwallet-restore-form');
+  if (!form) return;
+
+  // Mode toggle buttons
+  const modeButtons = form.querySelectorAll<HTMLButtonElement>('[data-restore-mode]');
+  for (const button of modeButtons) {
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      const mode = button.getAttribute('data-restore-mode') as RestoreMode;
+      if (mode) {
+        handlers.onModeChange(mode);
+      }
+    });
+  }
+
+  // Helper to capture current mnemonic form values
+  const captureMnemonicFormValues = (): MnemonicFormValues => {
+    const mnemonicInput = form.querySelector<HTMLTextAreaElement>('.zeldwallet-restore-mnemonic-input');
+    const newPasswordInput = form.querySelector<HTMLInputElement>('.zeldwallet-restore-new-password-input');
+    const confirmPasswordInput = form.querySelector<HTMLInputElement>('.zeldwallet-restore-confirm-password-input');
+    const paymentPathInput = form.querySelector<HTMLInputElement>('[name="restore-payment-path"]');
+    const ordinalsPathInput = form.querySelector<HTMLInputElement>('[name="restore-ordinals-path"]');
+
+    return {
+      mnemonic: mnemonicInput?.value ?? '',
+      password: newPasswordInput?.value ?? '',
+      confirmPassword: confirmPasswordInput?.value ?? '',
+      paymentPath: paymentPathInput?.value ?? '',
+      ordinalsPath: ordinalsPathInput?.value ?? '',
+    };
+  };
+
+  // Advanced options toggle
+  const advancedToggle = form.querySelector<HTMLButtonElement>('[data-toggle-advanced]');
+  if (advancedToggle) {
+    advancedToggle.addEventListener('click', (event) => {
+      event.preventDefault();
+      // Capture current form values before triggering re-render
+      const currentValues = captureMnemonicFormValues();
+      handlers.onToggleAdvanced(currentValues);
+    });
+  }
+
+  // Input change handlers to preserve form values during re-renders
+  const mnemonicInput = form.querySelector<HTMLTextAreaElement>('.zeldwallet-restore-mnemonic-input');
+  if (mnemonicInput) {
+    mnemonicInput.addEventListener('input', () => {
+      handlers.onInputChange({ mnemonic: mnemonicInput.value });
+    });
+  }
+
+  const newPasswordInput = form.querySelector<HTMLInputElement>('.zeldwallet-restore-new-password-input');
+  if (newPasswordInput) {
+    newPasswordInput.addEventListener('input', () => {
+      handlers.onInputChange({ password: newPasswordInput.value });
+    });
+  }
+
+  const confirmPasswordInput = form.querySelector<HTMLInputElement>('.zeldwallet-restore-confirm-password-input');
+  if (confirmPasswordInput) {
+    confirmPasswordInput.addEventListener('input', () => {
+      handlers.onInputChange({ confirmPassword: confirmPasswordInput.value });
+    });
+  }
+
+  const paymentPathInput = form.querySelector<HTMLInputElement>('[name="restore-payment-path"]');
+  if (paymentPathInput) {
+    paymentPathInput.addEventListener('input', () => {
+      handlers.onInputChange({ paymentPath: paymentPathInput.value });
+    });
+  }
+
+  const ordinalsPathInput = form.querySelector<HTMLInputElement>('[name="restore-ordinals-path"]');
+  if (ordinalsPathInput) {
+    ordinalsPathInput.addEventListener('input', () => {
+      handlers.onInputChange({ ordinalsPath: ordinalsPathInput.value });
+    });
+  }
+
+  // Form submission
+  form.addEventListener('submit', (event) => {
+    event.preventDefault();
+    const currentMode = form.getAttribute('data-restore-mode') as RestoreMode;
+
+    if (currentMode === 'mnemonic') {
+      // Mnemonic mode submission
+      const mnemonicInput = form.querySelector<HTMLTextAreaElement>('.zeldwallet-restore-mnemonic-input');
+      const newPasswordInput = form.querySelector<HTMLInputElement>('.zeldwallet-restore-new-password-input');
+      const confirmPasswordInput = form.querySelector<HTMLInputElement>('.zeldwallet-restore-confirm-password-input');
+      const paymentPathInput = form.querySelector<HTMLInputElement>('[name="restore-payment-path"]');
+      const ordinalsPathInput = form.querySelector<HTMLInputElement>('[name="restore-ordinals-path"]');
+
+      const mnemonic = mnemonicInput?.value?.trim() ?? '';
+      const password = newPasswordInput?.value ?? '';
+      const confirmPassword = confirmPasswordInput?.value ?? '';
+      const paymentPath = paymentPathInput?.value?.trim() ?? '';
+      const ordinalsPath = ordinalsPathInput?.value?.trim() ?? '';
+
+      if (!mnemonic || !password) return;
+
+      handlers.onSubmitMnemonic({
+        mnemonic,
+        password,
+        confirmPassword,
+        paymentPath,
+        ordinalsPath,
+      });
+    } else {
+      // Backup mode submission
+      const textarea = form.querySelector<HTMLTextAreaElement>('.zeldwallet-restore-textarea:not(.zeldwallet-restore-mnemonic-input)');
+      const passwordInput = form.querySelector<HTMLInputElement>('.zeldwallet-restore-password-input');
+      const backupString = textarea?.value?.trim() ?? '';
+      const password = passwordInput?.value ?? '';
+      if (!backupString || !password) return;
+      handlers.onSubmitBackup(backupString, password);
+    }
+  });
+
+  // Cancel button
+  const cancel = form.querySelector<HTMLButtonElement>('.zeldwallet-restore-cancel');
+  if (cancel) {
+    cancel.addEventListener('click', (event) => {
+      event.preventDefault();
+      handlers.onCancel();
+    });
+  }
+};
+
 type HuntingHandlers = {
   onSendBtcChange: (checked: boolean) => void;
   onSendZeldChange: (checked: boolean) => void;
@@ -291,7 +458,7 @@ export const bindHunting = (shadowRoot: ShadowRoot, handlers: HuntingHandlers): 
 
   // Close fee selector when clicking outside
   const feeSelector = shadowRoot.querySelector<HTMLElement>('.zeldwallet-fee-selector');
-  if (feeSelector && !(shadowRoot as any)._zeldFeeClickOutsideBound) {
+  if (feeSelector && !(shadowRoot as ShadowRoot & { _zeldFeeClickOutsideBound?: boolean })._zeldFeeClickOutsideBound) {
     const handleClickOutside = (event: Event): void => {
       const currentFeeSelector = shadowRoot.querySelector<HTMLElement>('.zeldwallet-fee-selector');
       if (!currentFeeSelector) return;
@@ -314,7 +481,7 @@ export const bindHunting = (shadowRoot: ShadowRoot, handlers: HuntingHandlers): 
     };
     
     shadowRoot.addEventListener('click', handleClickOutside as EventListener);
-    (shadowRoot as any)._zeldFeeClickOutsideBound = true;
+    (shadowRoot as ShadowRoot & { _zeldFeeClickOutsideBound?: boolean })._zeldFeeClickOutsideBound = true;
   }
 
   // Address input
@@ -354,7 +521,7 @@ export const bindHunting = (shadowRoot: ShadowRoot, handlers: HuntingHandlers): 
   }
 
   // Delegated click fallback (covers re-renders where specific listeners might be lost)
-  if (!(shadowRoot as any)._zeldHuntingDelegatedBound) {
+  if (!(shadowRoot as ShadowRoot & { _zeldHuntingDelegatedBound?: boolean })._zeldHuntingDelegatedBound) {
     shadowRoot.addEventListener('click', (event) => {
       const target = event.target as HTMLElement | null;
       if (target?.closest('[data-mining-stop]')) {
@@ -364,7 +531,7 @@ export const bindHunting = (shadowRoot: ShadowRoot, handlers: HuntingHandlers): 
         return;
       }
     });
-    (shadowRoot as any)._zeldHuntingDelegatedBound = true;
+    (shadowRoot as ShadowRoot & { _zeldHuntingDelegatedBound?: boolean })._zeldHuntingDelegatedBound = true;
   }
 
   // Mining resume button
@@ -429,6 +596,23 @@ export const bindHunting = (shadowRoot: ShadowRoot, handlers: HuntingHandlers): 
       if (event.target === confirmOverlay) {
         event.preventDefault();
         handlers.onCancelConfirmation();
+      }
+    });
+  }
+};
+
+type MobileTabHandlers = {
+  onTabChange: (tab: MobileActiveTab) => void;
+};
+
+export const bindMobileTabs = (shadowRoot: ShadowRoot, handlers: MobileTabHandlers): void => {
+  const tabButtons = Array.from(shadowRoot.querySelectorAll<HTMLButtonElement>('[data-mobile-tab-select]'));
+  for (const button of tabButtons) {
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      const tab = button.getAttribute('data-mobile-tab-select') as MobileActiveTab | null;
+      if (tab && (tab === 'addresses' || tab === 'balances')) {
+        handlers.onTabChange(tab);
       }
     });
   }

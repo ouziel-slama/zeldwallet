@@ -13,7 +13,7 @@ import {
   prepareSimpleHunt,
   prepareBtcSendHunt,
   prepareZeldSendHunt,
-  InsufficientFundsError,
+  MinerError,
   DUST,
   MIN_FEE_RESERVE,
   type UtxoInfo,
@@ -103,12 +103,12 @@ describe('addressToScriptPubKey', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('prepareSimpleHunt', () => {
-  const minRequired = DUST + MIN_FEE_RESERVE; // 1830 sats
+  const minRequired = 2 * DUST; // 660 sats
 
   it('should select the smallest viable UTXO', () => {
     const paymentUtxos: UtxoInfo[] = [
       createUtxo(5000, 'a'.repeat(64), 0),
-      createUtxo(2000, 'b'.repeat(64), 0), // Smallest viable (> 1830)
+      createUtxo(1000, 'b'.repeat(64), 0), // Smallest viable (> 660)
       createUtxo(10000, 'c'.repeat(64), 0),
     ];
 
@@ -123,14 +123,14 @@ describe('prepareSimpleHunt', () => {
 
     expect(result.inputs).toHaveLength(1);
     expect(result.inputs[0].txid).toBe('b'.repeat(64));
-    expect(result.inputs[0].amount).toBe(2000);
+    expect(result.inputs[0].amount).toBe(1000);
   });
 
   it('should skip UTXOs that are too small', () => {
     const paymentUtxos: UtxoInfo[] = [
-      createUtxo(1000, 'a'.repeat(64), 0), // Too small
-      createUtxo(1500, 'b'.repeat(64), 0), // Too small
-      createUtxo(3000, 'c'.repeat(64), 0), // Viable
+      createUtxo(500, 'a'.repeat(64), 0), // Too small (< 660)
+      createUtxo(600, 'b'.repeat(64), 0), // Too small (< 660)
+      createUtxo(1000, 'c'.repeat(64), 0), // Viable (> 660)
     ];
 
     const result = prepareSimpleHunt(
@@ -202,21 +202,21 @@ describe('prepareSimpleHunt', () => {
     expect(result.distribution).toBeUndefined();
   });
 
-  it('should throw InsufficientFundsError when no viable UTXO exists', () => {
+  it('should throw MinerError when no viable UTXO exists', () => {
     const paymentUtxos: UtxoInfo[] = [
-      createUtxo(1000), // Too small
-      createUtxo(500), // Too small
+      createUtxo(500), // Too small (< 660)
+      createUtxo(300), // Too small (< 660)
     ];
 
     expect(() =>
       prepareSimpleHunt(PAYMENT_ADDRESS, paymentUtxos, ORDINALS_ADDRESS, 6, true, 'mainnet')
-    ).toThrow(InsufficientFundsError);
+    ).toThrow(MinerError);
   });
 
-  it('should throw InsufficientFundsError for empty UTXO list', () => {
+  it('should throw MinerError for empty UTXO list', () => {
     expect(() =>
       prepareSimpleHunt(PAYMENT_ADDRESS, [], ORDINALS_ADDRESS, 6, true, 'mainnet')
-    ).toThrow(InsufficientFundsError);
+    ).toThrow(MinerError);
   });
 
   it('should skip unconfirmed UTXOs', () => {
@@ -230,7 +230,7 @@ describe('prepareSimpleHunt', () => {
 
     expect(() =>
       prepareSimpleHunt(PAYMENT_ADDRESS, paymentUtxos, ORDINALS_ADDRESS, 6, true, 'mainnet')
-    ).toThrow(InsufficientFundsError);
+    ).toThrow(MinerError);
   });
 
   it('should generate valid scriptPubKey in input', () => {
@@ -353,7 +353,7 @@ describe('prepareBtcSendHunt', () => {
     expect(result.distribution).toBeUndefined();
   });
 
-  it('should throw InsufficientFundsError when not enough funds', () => {
+  it('should throw MinerError when not enough funds', () => {
     const btcOutput = { address: RECIPIENT_ADDRESS, amount: 100000 };
     const paymentUtxos: UtxoInfo[] = [
       createUtxo(30000),
@@ -370,7 +370,7 @@ describe('prepareBtcSendHunt', () => {
         true,
         'mainnet'
       )
-    ).toThrow(InsufficientFundsError);
+    ).toThrow(MinerError);
   });
 });
 
@@ -492,7 +492,7 @@ describe('prepareZeldSendHunt', () => {
     expect(result.distribution![2]).toBe(0n);
   });
 
-  it('should throw InsufficientFundsError when not enough Zeld', () => {
+  it('should throw MinerError when not enough Zeld', () => {
     const zeldOutput = { address: RECIPIENT_ADDRESS, amount: 1000_00000000 }; // 1000 Zeld
     const ordinalsUtxos: OrdinalsUtxo[] = [
       createOrdinalsUtxo(3000, 100_00000000), // Only 100 Zeld
@@ -510,10 +510,10 @@ describe('prepareZeldSendHunt', () => {
         true,
         'mainnet'
       )
-    ).toThrow(InsufficientFundsError);
+    ).toThrow(MinerError);
   });
 
-  it('should throw InsufficientFundsError when not enough BTC', () => {
+  it('should throw MinerError when not enough BTC', () => {
     const zeldOutput = { address: RECIPIENT_ADDRESS, amount: 100_00000000 };
     const ordinalsUtxos: OrdinalsUtxo[] = [
       createOrdinalsUtxo(100, 200_00000000), // 100 sats only
@@ -531,7 +531,7 @@ describe('prepareZeldSendHunt', () => {
         true,
         'mainnet'
       )
-    ).toThrow(InsufficientFundsError);
+    ).toThrow(MinerError);
   });
 
   it('should use remaining ordinals UTXOs before payment UTXOs for BTC', () => {
@@ -672,7 +672,7 @@ describe('prepareMinerArgs', () => {
         undefined,
         'mainnet'
       )
-    ).toThrow('Invalid targetZeros');
+    ).toThrow(MinerError);
   });
 
   it('should throw for invalid targetZeros (too high)', () => {
@@ -690,7 +690,7 @@ describe('prepareMinerArgs', () => {
         undefined,
         'mainnet'
       )
-    ).toThrow('Invalid targetZeros');
+    ).toThrow(MinerError);
   });
 
   it('should work with testnet network', () => {

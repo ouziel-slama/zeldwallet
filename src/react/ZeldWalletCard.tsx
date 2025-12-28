@@ -14,6 +14,7 @@ import type { UseZeldWalletControllerArgs } from './useZeldWalletController';
 
 declare global {
   // Allow usage of the custom element in TSX without casting to any.
+  // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace JSX {
     interface IntrinsicElements {
       'zeld-wallet-ui': DetailedHTMLProps<HTMLAttributes<HTMLElement>, HTMLElement>;

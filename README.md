@@ -1,5 +1,10 @@
 # ZeldWallet
 
+[![Lint](https://github.com/ouziel-slama/zeldwallet/actions/workflows/lint.yml/badge.svg)](https://github.com/ouziel-slama/zeldwallet/actions/workflows/lint.yml)
+[![Test](https://github.com/ouziel-slama/zeldwallet/actions/workflows/test.yml/badge.svg)](https://github.com/ouziel-slama/zeldwallet/actions/workflows/test.yml)
+[![codecov](https://codecov.io/gh/ouziel-slama/zeldwallet/graph/badge.svg?token=L5P886HP35)](https://codecov.io/gh/ouziel-slama/zeldwallet)
+[![npm version](https://img.shields.io/npm/v/zeldwallet.svg)](https://www.npmjs.com/package/zeldwallet)
+
 Lightweight JavaScript library for creating a Bitcoin wallet directly in the browser.
 
 ZeldWallet combines Bitcoin key generation, secure storage (IndexedDB + Web Crypto API), and WBIP004 standard compatibility to be detected by existing Bitcoin applications like sats-connect.
@@ -17,12 +22,6 @@ ZeldWallet combines Bitcoin key generation, secure storage (IndexedDB + Web Cryp
 
 ```bash
 npm install zeldwallet
-```
-
-Or include directly in your HTML:
-
-```html
-<script src="https://unpkg.com/zeldwallet/dist/zeldwallet.iife.js"></script>
 ```
 
 ## Quick Start
@@ -282,10 +281,9 @@ npm test
 
 ## Build Outputs
 
-`npm run build` emits three formats to `dist/`:
-- ES module: `zeldwallet.es.js` (used by `exports.import`)
-- UMD: `zeldwallet.umd.js` (used by `exports.require`/`main`)
-- IIFE: `zeldwallet.iife.js` (attach `ZeldWallet` to `window`)
+`npm run build` emits to `dist/`:
+- ES module: `zeldwallet.es.js` (used by `exports.import` and `main`)
+- TypeScript declarations: `index.d.ts` and nested `.d.ts` files
 
 ## Standards
 
@@ -298,5 +296,10 @@ npm test
 
 ## License
 
-MIT
+This project is licensed under either of:
+
+- [Apache License, Version 2.0](LICENSE-APACHE)
+- [MIT License](LICENSE-MIT)
+
+at your option.
 

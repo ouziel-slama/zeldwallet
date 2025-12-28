@@ -4,10 +4,10 @@ import type { AddressInfo, NetworkType, WalletEvent } from '../types';
 import { isValidBitcoinAddress } from '../utils/validation';
 import { UnifiedWallet } from '../unifiedWallet';
 import { fetchBalances, type UtxoResponse } from './balance';
-import { DEFAULT_ELECTRS_URL, DEFAULT_PROVIDER, DEFAULT_ZELDHASH_API_URL, DUST, MIN_FEE_RESERVE } from './constants';
+import { DEFAULT_ELECTRS_URL, DEFAULT_PROVIDER, DEFAULT_ZELDHASH_API_URL } from './constants';
 import { describeError, isPasswordRequiredError, isWrongPasswordError } from './errors';
 import { getDirection, getStrings, resolveLocale, type LocaleKey, type LocaleStrings, type TextDirection } from './i18n';
-import { createInitialHuntingState, createInitialState, type ComponentState, type FeeMode, type OpReturnData, type ParsedTransaction, type ParsedTxInput, type ParsedTxOutput, type RecommendedFees } from './state';
+import { createInitialHuntingState, createInitialMnemonicRestoreState, createInitialState, type ComponentState, type FeeMode, type MobileActiveTab, type OpReturnData, type ParsedTransaction, type ParsedTxInput, type ParsedTxOutput, type RecommendedFees } from './state';
 import { prepareMinerArgs, type OrdinalsUtxo, type UtxoInfo } from './miner';
 import {
   connectExternalWallet,
@@ -198,25 +198,26 @@ function parseOpReturn(script: Buffer): OpReturnData | null {
   
   // Check for ZELD magic prefix (0x5a 0x45 0x4c 0x44 = "ZELD")
   const ZELD_MAGIC = [0x5a, 0x45, 0x4c, 0x44]; // "ZELD"
-  let cborData = data;
   
-  if (data.length > 4 && 
+  const hasZeldPrefix = data.length >= 5 && 
       data[0] === ZELD_MAGIC[0] && 
       data[1] === ZELD_MAGIC[1] && 
       data[2] === ZELD_MAGIC[2] && 
-      data[3] === ZELD_MAGIC[3]) {
-    // Skip the "ZELD" prefix to get to the CBOR data
-    cborData = data.slice(4);
-  }
+      data[3] === ZELD_MAGIC[3];
   
-  // Try to decode as CBOR array (ZELD distribution)
-  const cborArray = decodeCborArray(cborData);
-  if (cborArray && cborArray.length >= 2) {
-    // CBOR array with at least 2 elements: distribution amounts + nonce
-    return {
-      type: 'zeld',
-      distribution: cborArray,
-    };
+  if (hasZeldPrefix) {
+    // Skip the "ZELD" prefix to get to the CBOR data
+    const cborData = data.slice(4);
+    
+    // Try to decode as CBOR array (ZELD distribution)
+    // The array contains distribution amounts + nonce as last element
+    const cborArray = decodeCborArray(cborData);
+    if (cborArray && cborArray.length >= 1) {
+      return {
+        type: 'zeld',
+        distribution: cborArray,
+      };
+    }
   }
   
   // Otherwise, treat as simple nonce (big-endian encoded)
@@ -499,9 +500,209 @@ export class ZeldWalletController {
     this.setState({ backupValue: undefined, backupError: undefined, showBackupForm: false });
   }
 
+  showRestoreForm(): void {
+    this.setState({
+      showRestoreForm: true,
+      restoreMode: 'backup',
+      restoreError: undefined,
+      mnemonicRestoreState: createInitialMnemonicRestoreState(),
+      showSetPasswordForm: false,
+      setPasswordError: undefined,
+      showBackupForm: false,
+      backupError: undefined,
+      backupValue: undefined,
+    });
+  }
+
+  hideRestoreForm(): void {
+    this.setState({
+      showRestoreForm: false,
+      restoreError: undefined,
+      restoreMode: undefined,
+      mnemonicRestoreState: undefined,
+    });
+  }
+
+  setRestoreMode(mode: 'backup' | 'mnemonic'): void {
+    this.setState({ restoreMode: mode, restoreError: undefined });
+  }
+
+  toggleRestoreAdvanced(currentValues?: {
+    mnemonic: string;
+    password: string;
+    confirmPassword: string;
+    paymentPath: string;
+    ordinalsPath: string;
+  }): void {
+    const current = this.state.mnemonicRestoreState;
+    if (!current) return;
+    this.setState({
+      mnemonicRestoreState: {
+        ...current,
+        // Preserve form values if provided
+        mnemonic: currentValues?.mnemonic ?? current.mnemonic,
+        password: currentValues?.password ?? current.password,
+        confirmPassword: currentValues?.confirmPassword ?? current.confirmPassword,
+        paymentDerivationPath: currentValues?.paymentPath || current.paymentDerivationPath,
+        ordinalsDerivationPath: currentValues?.ordinalsPath || current.ordinalsDerivationPath,
+        showAdvanced: !current.showAdvanced,
+      },
+    });
+  }
+
+  updateMnemonicRestoreState(values: {
+    mnemonic?: string;
+    password?: string;
+    confirmPassword?: string;
+    paymentPath?: string;
+    ordinalsPath?: string;
+  }): void {
+    const current = this.state.mnemonicRestoreState;
+    if (!current) return;
+    this.setState({
+      mnemonicRestoreState: {
+        ...current,
+        mnemonic: values.mnemonic ?? current.mnemonic,
+        password: values.password ?? current.password,
+        confirmPassword: values.confirmPassword ?? current.confirmPassword,
+        paymentDerivationPath: values.paymentPath ?? current.paymentDerivationPath,
+        ordinalsDerivationPath: values.ordinalsPath ?? current.ordinalsDerivationPath,
+      },
+    });
+  }
+
+  async handleRestore(backupString: string, backupPassword: string): Promise<void> {
+    this.setState({ restoreError: undefined, status: 'recovering' });
+    try {
+      // Import the backup with overwrite option to replace existing wallet
+      // Use the backup password as both the decryption key and the new wallet password
+      await ZeldWallet.importBackup(backupString, backupPassword, backupPassword, { overwrite: true });
+      // Lock the wallet so the user needs to enter the password again
+      ZeldWallet.lock();
+      // After successful restore, hide the form and show locked state
+      this.setState({
+        showRestoreForm: false,
+        restoreError: undefined,
+        restoreMode: undefined,
+        mnemonicRestoreState: undefined,
+        status: 'locked',
+        hasPassword: true,
+        hasBackup: true,
+        addresses: undefined,
+        passwordError: undefined,
+      });
+    } catch (error) {
+      this.setState({
+        restoreError: describeError(error, this.locale),
+        status: this.state.addresses ? 'ready' : 'loading',
+      });
+      // Re-run bootstrap to reset to proper state
+      await this.bootstrap();
+    }
+  }
+
+  async handleMnemonicRestore(data: {
+    mnemonic: string;
+    password: string;
+    confirmPassword: string;
+    paymentPath: string;
+    ordinalsPath: string;
+  }): Promise<void> {
+    const strings = getStrings(this.locale);
+    const { mnemonic, password, confirmPassword, paymentPath, ordinalsPath } = data;
+
+    // Validate password is provided
+    if (!password || password.trim() === '') {
+      this.setState({ restoreError: strings.restorePasswordRequired });
+      return;
+    }
+
+    // Validate passwords match
+    if (password !== confirmPassword) {
+      this.setState({ restoreError: strings.restorePasswordMismatch });
+      return;
+    }
+
+    // Validate mnemonic word count (12 or 24 words)
+    const words = mnemonic.trim().toLowerCase().split(/\s+/);
+    if (words.length !== 12 && words.length !== 24) {
+      this.setState({ restoreError: strings.restoreMnemonicInvalid });
+      return;
+    }
+
+    // Validate derivation paths format (basic check)
+    const pathRegex = /^m\/\d+'\/\d+'\/\d+'\/\d+\/\d+$/;
+    if (paymentPath && !pathRegex.test(paymentPath)) {
+      this.setState({ restoreError: strings.restoreDerivationPathInvalid });
+      return;
+    }
+    if (ordinalsPath && !pathRegex.test(ordinalsPath)) {
+      this.setState({ restoreError: strings.restoreDerivationPathInvalid });
+      return;
+    }
+
+    this.setState({ restoreError: undefined, status: 'recovering' });
+
+    try {
+      // Check if wallet exists and destroy it first
+      if (await ZeldWallet.exists()) {
+        await ZeldWallet.destroy();
+      }
+
+      // Prepare custom paths (use provided paths, or undefined to use defaults)
+      const customPaths = (paymentPath || ordinalsPath) ? {
+        payment: paymentPath || undefined,
+        ordinals: ordinalsPath || undefined,
+      } : undefined;
+
+      // Restore wallet from mnemonic with custom derivation paths
+      await ZeldWallet.restore(mnemonic.trim().toLowerCase(), password, undefined, customPaths);
+
+      // Mark as backed up since user has the mnemonic
+      await ZeldWallet.markBackupCompleted();
+
+      // Lock the wallet so the user needs to enter the password again
+      ZeldWallet.lock();
+
+      // After successful restore, hide the form and show locked state
+      this.setState({
+        showRestoreForm: false,
+        restoreError: undefined,
+        restoreMode: undefined,
+        mnemonicRestoreState: undefined,
+        status: 'locked',
+        hasPassword: true,
+        hasBackup: true,
+        addresses: undefined,
+        passwordError: undefined,
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      // Check for common mnemonic errors
+      if (errorMessage.toLowerCase().includes('mnemonic') || errorMessage.toLowerCase().includes('invalid')) {
+        this.setState({
+          restoreError: strings.restoreMnemonicInvalid,
+          status: this.state.addresses ? 'ready' : 'loading',
+        });
+      } else {
+        this.setState({
+          restoreError: describeError(error, this.locale),
+          status: this.state.addresses ? 'ready' : 'loading',
+        });
+      }
+      // Re-run bootstrap to reset to proper state
+      await this.bootstrap();
+    }
+  }
+
   toggleWalletPicker(): void {
     this.refreshWalletOptions();
     this.setState({ walletPickerOpen: !this.state.walletPickerOpen });
+  }
+
+  /** Set the active tab on mobile (addresses or balances) */
+  setMobileActiveTab(tab: MobileActiveTab): void {
+    this.setState({ mobileActiveTab: tab });
   }
 
   async connectWallet(walletId: SupportedWalletId, networkOverride?: NetworkType): Promise<void> {
@@ -550,7 +751,7 @@ export class ZeldWalletController {
         addressCount: session.addresses.length,
         hasSignMessage: typeof session.signMessage === 'function',
         hasSignPsbt: typeof session.signPsbt === 'function',
-        hasProvider: !!(session as any).provider,
+        hasProvider: !!session.provider,
       });
       UnifiedWallet.useExternal(session);
       console.log('[controller.connectWallet] UnifiedWallet.useExternal called, isExternalActive:', UnifiedWallet.isExternalActive());
@@ -755,7 +956,6 @@ export class ZeldWalletController {
       ZeldWallet.registerProvider(DEFAULT_PROVIDER);
       this.providerRegistered = true;
     } catch (error) {
-      // eslint-disable-next-line no-console
       console.warn('[ZeldWalletController] Failed to register WBIP provider', error);
       throw error;
     }
@@ -1124,69 +1324,67 @@ export class ZeldWalletController {
 
     const strings = getStrings(this.locale);
     const network = this.getSnapshot().network;
-    const paymentBtcSats = this.state.balance?.btcPaymentSats ?? this.state.balance?.btcSats ?? 0;
-    const totalBtcSats = this.state.balance?.btcSats ?? 0;
-    const zeldBalance = this.state.balance?.zeldBalance ?? 0;
-    const simpleHuntThreshold = DUST + MIN_FEE_RESERVE;
-    const zeldHuntThreshold = 2 * DUST + MIN_FEE_RESERVE;
 
     const trimmedAddress = hunting.recipientAddress.trim();
     const trimmedAmount = hunting.amount.trim();
     const parsedAmount = trimmedAmount ? parseFloat(trimmedAmount) : NaN;
 
-    // Validate per mode
+    // Simplified validation - only check input format, let zeldhash-miner handle balance errors
     let pendingBtcAmountSats: number | undefined;
     let pendingZeldAmount: number | undefined;
 
-    if (!hunting.sendBtcChecked && !hunting.sendZeldChecked) {
-      if (paymentBtcSats < simpleHuntThreshold) {
-        this.setMiningError(strings.huntingDisabledNoBtc);
-        return;
-      }
-    } else if (hunting.sendBtcChecked) {
+    if (hunting.sendBtcChecked) {
+      // Validate address format
       if (!trimmedAddress || !isValidBitcoinAddress(trimmedAddress, network)) {
         this.setMiningError(strings.huntingDisabledInvalidAddress);
         return;
       }
+      // Validate amount format
       if (!trimmedAmount || !Number.isFinite(parsedAmount) || parsedAmount <= 0) {
         this.setMiningError(strings.huntingDisabledInvalidAmount);
         return;
       }
       pendingBtcAmountSats = Math.round(parsedAmount * 100_000_000);
-      const required = pendingBtcAmountSats + DUST + MIN_FEE_RESERVE;
-      if (paymentBtcSats < required) {
-        this.setMiningError(strings.huntingDisabledInsufficientBtc);
-        return;
-      }
     } else if (hunting.sendZeldChecked) {
+      // Validate address format
       if (!trimmedAddress || !isValidBitcoinAddress(trimmedAddress, network)) {
         this.setMiningError(strings.huntingDisabledInvalidAddress);
         return;
       }
+      // Validate amount format
       if (!trimmedAmount || !Number.isFinite(parsedAmount) || parsedAmount <= 0) {
         this.setMiningError(strings.huntingDisabledInvalidAmount);
         return;
       }
       pendingZeldAmount = Math.round(parsedAmount * 100_000_000);
-      if (zeldBalance < pendingZeldAmount) {
-        this.setMiningError(strings.huntingDisabledInsufficientZeld);
-        return;
-      }
-      if (totalBtcSats < zeldHuntThreshold) {
-        this.setMiningError(strings.huntingDisabledInsufficientBtc);
-        return;
-      }
     }
 
     // Set mining status
     this.setHuntingState({ miningStatus: 'mining', miningError: undefined, miningResult: undefined, broadcastTxid: undefined });
 
     try {
-      // Fetch UTXOs
-      const [paymentUtxos, ordinalsUtxos] = await Promise.all([
-        this.fetchUtxosForAddress(paymentAddr.address),
+      // Fetch UTXOs with their ZELD balances so we can filter out ZELD-bearing inputs when needed
+      const [paymentUtxosWithZeld, ordinalsUtxosWithZeld] = await Promise.all([
+        this.fetchUtxosWithZeldBalances(paymentAddr.address),
         this.fetchOrdinalsUtxosWithZeld(ordinalsAddr.address),
       ]);
+
+      // When not sending ZELD, never include inputs that hold a positive ZELD balance
+      let paymentUtxos: OrdinalsUtxo[] = paymentUtxosWithZeld;
+      let ordinalsUtxos: OrdinalsUtxo[] = ordinalsUtxosWithZeld;
+      if (!hunting.sendZeldChecked) {
+        const filterZeldFree = <T extends { zeldBalance?: number }>(utxos: T[]): T[] =>
+          utxos.filter((u) => (u.zeldBalance ?? 0) <= 0);
+
+        paymentUtxos = filterZeldFree(paymentUtxosWithZeld) as OrdinalsUtxo[];
+        ordinalsUtxos = filterZeldFree(ordinalsUtxosWithZeld) as OrdinalsUtxo[];
+
+        // If we filtered everything out, we cannot proceed without risking ZELD spend.
+        if (paymentUtxos.length === 0) {
+          this.setMiningError(strings.huntingDisabledInsufficientBtc);
+          return;
+        }
+      }
 
       // If user stopped while we were preparing, abort early
       if (runId !== this.miningRunId) {
@@ -1218,6 +1416,16 @@ export class ZeldWalletController {
         network
       );
 
+      // Store ZELD balances for inputs so we can display them in the confirmation dialog
+      // Build a map of "txid:vout" -> zeldBalance from the ordinalsUtxos
+      const inputUtxoZeldBalances: Record<string, number> = {};
+      for (const utxo of ordinalsUtxos) {
+        if (utxo.zeldBalance > 0) {
+          inputUtxoZeldBalances[`${utxo.txid}:${utxo.vout}`] = utxo.zeldBalance;
+        }
+      }
+      this.setHuntingState({ inputUtxoZeldBalances });
+
       // Create miner instance
       const batchSize = hunting.useGpu ? GPU_BATCH_SIZE : CPU_BATCH_SIZE;
       const feeRate = this.getCurrentFeeRate();
@@ -1246,14 +1454,6 @@ export class ZeldWalletController {
           return;
         }
         this.lastMiningProgressMs = now;
-        // DEBUG: Log raw stats to compare with web-demo
-        console.log('[ZeldWallet Mining]', {
-          hashRate: stats.hashRate,
-          hashRateFormatted: stats.hashRate >= 1_000_000 ? `${(stats.hashRate / 1_000_000).toFixed(2)} MH/s` : `${(stats.hashRate / 1_000).toFixed(2)} kH/s`,
-          hashesProcessed: stats.hashesProcessed.toString(),
-          elapsedMs: stats.elapsedMs,
-          elapsedSec: ((stats.elapsedMs ?? 0) / 1000).toFixed(2),
-        });
         this.setHuntingState({
           miningStats: {
             hashRate: stats.hashRate,
@@ -1477,7 +1677,7 @@ export class ZeldWalletController {
       // Check if user cancelled the signing - in that case, go back to 'found' state
       // so they can try again without losing their mined result
       const errorMessage = error instanceof Error ? error.message : String(error);
-      const errorCode = (error as any)?.code;
+      const errorCode = (error as Error & { code?: string | number })?.code;
       const isUserCancelled = 
         errorCode === 'user-cancelled-signing' ||
         errorCode === 'user-cancelled' ||
@@ -1519,6 +1719,9 @@ export class ZeldWalletController {
     const addresses = this.state.addresses ?? [];
     const ourAddresses = new Set(addresses.map((a) => a.address).filter(Boolean));
 
+    // Get ZELD balances map for inputs
+    const inputUtxoZeldBalances = this.state.hunting?.inputUtxoZeldBalances ?? {};
+
     // Parse inputs
     const inputs: ParsedTxInput[] = [];
     let totalInputValue = 0;
@@ -1539,12 +1742,20 @@ export class ZeldWalletController {
         }
       }
 
+      // Get the txid for this input
+      const inputTxid = Buffer.from(txInput.hash).reverse().toString('hex');
+      const inputVout = txInput.index;
+      
+      // Look up ZELD balance from stored map
+      const zeldBalance = inputUtxoZeldBalances[`${inputTxid}:${inputVout}`];
+
       totalInputValue += inputValue;
       inputs.push({
-        txid: Buffer.from(txInput.hash).reverse().toString('hex'),
-        vout: txInput.index,
+        txid: inputTxid,
+        vout: inputVout,
         address: inputAddress,
         value: inputValue,
+        zeldBalance,
       });
     }
 
@@ -1684,9 +1895,9 @@ export class ZeldWalletController {
   }
 
   /**
-   * Fetches ordinals UTXOs and enriches them with ZELD balances from the ZeldHash API.
+   * Fetches UTXOs for an address and annotates them with their ZELD balances.
    */
-  private async fetchOrdinalsUtxosWithZeld(address: string): Promise<OrdinalsUtxo[]> {
+  private async fetchUtxosWithZeldBalances(address: string): Promise<OrdinalsUtxo[]> {
     const utxos = await this.fetchUtxosForAddress(address);
 
     const confirmedOutpoints = utxos
@@ -1725,6 +1936,13 @@ export class ZeldWalletController {
       console.warn(`[ZeldWalletController] Error fetching ZELD balances for ${address}:`, error);
       return utxos.map((u) => ({ ...u, zeldBalance: 0 }));
     }
+  }
+
+  /**
+   * Fetches ordinals UTXOs and enriches them with ZELD balances from the ZeldHash API.
+   */
+  private async fetchOrdinalsUtxosWithZeld(address: string): Promise<OrdinalsUtxo[]> {
+    return this.fetchUtxosWithZeldBalances(address);
   }
 }
 

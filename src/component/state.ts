@@ -35,6 +35,8 @@ export type ParsedTxInput = {
   vout: number;
   address: string;
   value: number; // in satoshis
+  /** ZELD balance for this input (in minimal units, 8 decimals) */
+  zeldBalance?: number;
 };
 
 /** Type of OP_RETURN data */
@@ -106,7 +108,37 @@ export type HuntingState = {
   // Confirmation dialog state
   showConfirmDialog?: boolean;
   parsedTransaction?: ParsedTransaction;
+  /** Map of "txid:vout" -> ZELD balance for inputs used in the current mining session */
+  inputUtxoZeldBalances?: Record<string, number>;
 };
+
+/** Mobile tab selection for addresses/balances columns */
+export type MobileActiveTab = 'balances' | 'addresses';
+
+/** Restore mode selection */
+export type RestoreMode = 'backup' | 'mnemonic';
+
+/** Mnemonic restore form state */
+export type MnemonicRestoreState = {
+  mnemonic: string;
+  paymentDerivationPath: string;
+  ordinalsDerivationPath: string;
+  password: string;
+  confirmPassword: string;
+  showAdvanced: boolean;
+};
+
+export const DEFAULT_PAYMENT_PATH = "m/84'/0'/0'/0/0";
+export const DEFAULT_ORDINALS_PATH = "m/86'/0'/0'/0/0";
+
+export const createInitialMnemonicRestoreState = (): MnemonicRestoreState => ({
+  mnemonic: '',
+  paymentDerivationPath: DEFAULT_PAYMENT_PATH,
+  ordinalsDerivationPath: DEFAULT_ORDINALS_PATH,
+  password: '',
+  confirmPassword: '',
+  showAdvanced: false,
+});
 
 export type ComponentState = {
   status: ComponentStatus;
@@ -120,6 +152,10 @@ export type ComponentState = {
   showBackupForm?: boolean;
   backupError?: string;
   backupValue?: string;
+  showRestoreForm?: boolean;
+  restoreError?: string;
+  restoreMode?: RestoreMode;
+  mnemonicRestoreState?: MnemonicRestoreState;
   walletKind: 'zeld' | 'external';
   activeWalletId: SupportedWalletId;
   activeWalletName: string;
@@ -128,6 +164,8 @@ export type ComponentState = {
   externalNetwork?: NetworkType;
   balance?: BalanceState;
   hunting?: HuntingState;
+  /** Active tab on mobile (balances shown by default) */
+  mobileActiveTab: MobileActiveTab;
 };
 
 export const createInitialHuntingState = (): HuntingState => ({
@@ -150,5 +188,6 @@ export const createInitialState = (walletOptions: WalletOptionState[] = []): Com
   walletPickerOpen: false,
   walletOptions,
   hunting: createInitialHuntingState(),
+  mobileActiveTab: 'balances',
 });
 

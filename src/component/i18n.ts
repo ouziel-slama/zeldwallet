@@ -44,6 +44,7 @@ export type LocaleStrings = {
   hidePassword: string;
   ready: string;
   readyHint: string;
+  balancesHint: string;
   error: string;
   wrongNetwork: string;
   paymentLabel: string;
@@ -123,7 +124,36 @@ export type LocaleStrings = {
   confirmDialogTotalLabel: string;
   confirmDialogConfirm: string;
   confirmDialogCancel: string;
+  confirmDialogClose: string;
   confirmDialogChangeLabel: string;
+  // Restore wallet
+  restoreWallet: string;
+  restoreWalletHint: string;
+  restoreBackupPlaceholder: string;
+  restorePasswordPlaceholder: string;
+  restoreSubmit: string;
+  restoreCancel: string;
+  // Mnemonic restore
+  restoreModeBackup: string;
+  restoreModeMnemonic: string;
+  restoreMnemonicPlaceholder: string;
+  restoreNewPasswordPlaceholder: string;
+  restoreConfirmPasswordPlaceholder: string;
+  restoreAdvancedOptions: string;
+  restorePaymentPathLabel: string;
+  restoreOrdinalsPathLabel: string;
+  restorePaymentPathPlaceholder: string;
+  restoreOrdinalsPathPlaceholder: string;
+  restoreMnemonicInvalid: string;
+  restorePasswordMismatch: string;
+  restorePasswordRequired: string;
+  restoreDerivationPathInvalid: string;
+  // Miner errors
+  minerErrorNoUtxo: string;
+  minerErrorInsufficientBtc: string;
+  minerErrorInsufficientZeld: string;
+  minerErrorInsufficientBtcForZeld: string;
+  minerErrorInvalidTargetZeros: string;
 };
 
 export type LocaleStringsInput = Partial<LocaleStrings>;

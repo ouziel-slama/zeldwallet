@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Install by pointing git to this directory: `git config core.hooksPath .githooks`
+set -euo pipefail
+
+npm run lint
+npm run typecheck
+npm run build
+npm run test -- --run

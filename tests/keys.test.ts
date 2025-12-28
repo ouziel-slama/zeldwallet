@@ -152,7 +152,7 @@ describe('KeyManager', () => {
       // Address beyond the clamp should not be scanned
       const outOfRange = keyManager.deriveAddress('nativeSegwit', 0, 0, 250);
       expect(keyManager.findAddressPath(outOfRange.address)).toBeNull();
-    });
+    }, 30_000); // Large lookup window requires many derivations
   });
 
   describe('getAddresses', () => {

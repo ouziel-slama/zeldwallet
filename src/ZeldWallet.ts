@@ -14,6 +14,7 @@ import { ConfirmationModal } from './ui/Modal';
 import type {
   AddressPurpose,
   AddressInfo,
+  ConfirmationData,
   NetworkType,
   WalletEvent,
   EventHandler,
@@ -54,7 +55,10 @@ export class ZeldWallet {
   private eventHandlers: Map<WalletEvent, Set<EventHandler>>;
   private unlocked: boolean = false;
   private lastProviderId: string | null = null;
-  private config: { network: NetworkType } = { network: 'mainnet' };
+  private config: { 
+    network: NetworkType;
+    customPaths?: { payment?: string; ordinals?: string };
+  } = { network: 'mainnet' };
   private defaultModal?: ConfirmationModal;
 
   constructor() {
@@ -126,8 +130,15 @@ export class ZeldWallet {
    * Restore a wallet from a mnemonic phrase
    * @param mnemonic - The BIP39 mnemonic phrase
    * @param password - Optional password for encryption
+   * @param mnemonicPassphrase - Optional BIP39 passphrase
+   * @param customPaths - Optional custom derivation paths for payment and ordinals addresses
    */
-  async restore(mnemonic: string, password?: string, mnemonicPassphrase?: string): Promise<void> {
+  async restore(
+    mnemonic: string, 
+    password?: string, 
+    mnemonicPassphrase?: string,
+    customPaths?: { payment?: string; ordinals?: string }
+  ): Promise<void> {
     if (password) {
       this.assertPasswordStrength(password, 'wallet password');
     }
@@ -152,7 +163,12 @@ export class ZeldWallet {
       wipeBytes(passphraseBytes);
     }
 
-    // Persist initial config (network, etc.)
+    // Store custom derivation paths if provided
+    if (customPaths) {
+      this.config.customPaths = customPaths;
+    }
+
+    // Persist initial config (network, custom paths, etc.)
     await this.persistConfig();
 
     // Request persistent storage
@@ -296,6 +312,13 @@ export class ZeldWallet {
     return this.storage.hasBackup();
   }
 
+  /**
+   * Mark the wallet as backed up (e.g., when restoring from mnemonic)
+   */
+  async markBackupCompleted(timestamp?: number): Promise<void> {
+    await this.storage.markBackupCompleted(timestamp ?? Date.now());
+  }
+
   // ============================================================================
   // Address & Signing Methods
   // ============================================================================
@@ -305,7 +328,7 @@ export class ZeldWallet {
    */
   getAddresses(purposes: AddressPurpose[]): AddressInfo[] {
     this.ensureUnlocked();
-    return this.keyManager.getAddresses(purposes);
+    return this.keyManager.getAddresses(purposes, this.config.customPaths);
   }
 
   /**
@@ -360,7 +383,7 @@ export class ZeldWallet {
 
     try {
       await this.persistConfig();
-    } catch (error) {
+    } catch {
       // Roll back to the previous network to avoid surprising state drift.
       this.keyManager.setNetwork(oldNetwork);
       this.config.network = oldNetwork;
@@ -522,7 +545,7 @@ export class ZeldWallet {
 
     let decryptedBytes: Uint8Array | null = null;
     let decrypted = '';
-    let backup: any = null;
+    let backup: { version?: number; mnemonic?: string; network?: NetworkType; passphrase?: string; createdAt?: number } | null = null;
     try {
       try {
         decryptedBytes = encryptedPayload
@@ -536,7 +559,7 @@ export class ZeldWallet {
       decrypted = new TextDecoder().decode(decryptedBytes);
       backup = JSON.parse(decrypted);
       
-      if (!backup.version || !backup.mnemonic) {
+      if (!backup || !backup.version || !backup.mnemonic) {
         throw new Error('Invalid backup format');
       }
 
@@ -641,21 +664,22 @@ export class ZeldWallet {
   private isValidBackupEnvelope(candidate: unknown): candidate is WalletBackupEnvelope {
     if (!candidate || typeof candidate !== 'object') return false;
     const env = candidate as WalletBackupEnvelope;
+    const kdf = env.kdf as { salt?: unknown; iterations?: unknown; hash?: unknown } | undefined;
     return (
       typeof env.version === 'number' &&
       typeof env.cipher === 'string' &&
-      !!env.kdf &&
-      typeof env.kdf === 'object' &&
-      typeof (env.kdf as any).salt === 'string' &&
-      typeof (env.kdf as any).iterations === 'number' &&
-      typeof (env.kdf as any).hash === 'string' &&
+      !!kdf &&
+      typeof kdf === 'object' &&
+      typeof kdf.salt === 'string' &&
+      typeof kdf.iterations === 'number' &&
+      typeof kdf.hash === 'string' &&
       typeof env.iv === 'string' &&
       typeof env.ciphertext === 'string'
     );
   }
 
   /**
-   * Load persisted configuration (network, etc.) from storage.
+   * Load persisted configuration (network, custom paths, etc.) from storage.
    */
   private async applyStoredConfig(): Promise<void> {
     const configBytes = await this.storage.get(DATA_KEYS.CONFIG);
@@ -667,6 +691,10 @@ export class ZeldWallet {
         this.config.network = config.network;
         this.keyManager.setNetwork(config.network);
       }
+      // Restore custom derivation paths
+      if (config?.customPaths) {
+        this.config.customPaths = config.customPaths;
+      }
     } catch {
       // Ignore malformed config to avoid blocking unlock; defaults stay.
     }
@@ -676,11 +704,13 @@ export class ZeldWallet {
    * Persist current configuration to storage.
    */
   private async persistConfig(): Promise<void> {
-    const payload = stringToBytes(
-      JSON.stringify({
-        network: this.keyManager.getNetwork(),
-      })
-    );
+    const configData: { network: NetworkType; customPaths?: { payment?: string; ordinals?: string } } = {
+      network: this.keyManager.getNetwork(),
+    };
+    if (this.config.customPaths) {
+      configData.customPaths = this.config.customPaths;
+    }
+    const payload = stringToBytes(JSON.stringify(configData));
     await this.storage.set(DATA_KEYS.CONFIG, payload);
   }
 
@@ -754,8 +784,13 @@ export class ZeldWallet {
     return ZeldWallet.getDefaultInstance().create(password, mnemonicPassphrase);
   }
 
-  static async restore(mnemonic: string, password?: string, mnemonicPassphrase?: string): Promise<void> {
-    return ZeldWallet.getDefaultInstance().restore(mnemonic, password, mnemonicPassphrase);
+  static async restore(
+    mnemonic: string, 
+    password?: string, 
+    mnemonicPassphrase?: string,
+    customPaths?: { payment?: string; ordinals?: string }
+  ): Promise<void> {
+    return ZeldWallet.getDefaultInstance().restore(mnemonic, password, mnemonicPassphrase, customPaths);
   }
 
   static async unlock(password?: string, mnemonicPassphrase?: string): Promise<void> {
@@ -818,6 +853,10 @@ export class ZeldWallet {
 
   static async hasBackup(): Promise<boolean> {
     return ZeldWallet.getDefaultInstance().hasBackup();
+  }
+
+  static async markBackupCompleted(timestamp?: number): Promise<void> {
+    return ZeldWallet.getDefaultInstance().markBackupCompleted(timestamp);
   }
 
   // Backup
@@ -890,7 +929,7 @@ export class ZeldWallet {
    */
   useConfirmationModal(modal: ConfirmationModal): void {
     this.defaultModal = modal;
-    this.setConfirmationHandler((type, payload) => modal.show(type as any, payload as any));
+    this.setConfirmationHandler((type, payload) => modal.show(type, payload as Partial<ConfirmationData> | undefined));
   }
 
   /**

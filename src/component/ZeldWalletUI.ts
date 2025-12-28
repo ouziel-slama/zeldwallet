@@ -3,8 +3,10 @@ import {
   bindBackupActions,
   bindCopyButtons,
   bindHunting,
+  bindMobileTabs,
   bindPasswordForm,
   bindPasswordVisibility,
+  bindRestoreActions,
   bindSetPasswordActions,
   bindWalletSwitcher,
 } from './bindings';
@@ -211,6 +213,7 @@ export class ZeldWalletUI extends BaseElement {
       network,
       dir,
       strings,
+      locale: snapshot.locale,
       showPasswordWarning,
       showBackupWarning,
       readyWithSecurity,
@@ -236,6 +239,19 @@ export class ZeldWalletUI extends BaseElement {
     bindWalletSwitcher(this.shadowRootRef, {
       onToggle: () => this.controller.toggleWalletPicker(),
       onConnect: (walletId) => this.controller.connectWallet(walletId as SupportedWalletId),
+    });
+    bindMobileTabs(this.shadowRootRef, {
+      onTabChange: (tab) => this.controller.setMobileActiveTab(tab),
+    });
+    // Restore is always available for ZeldWallet (not external wallets)
+    bindRestoreActions(this.shadowRootRef, {
+      onShowForm: () => this.controller.showRestoreForm(),
+      onSubmitBackup: (backupString, password) => this.controller.handleRestore(backupString, password),
+      onSubmitMnemonic: (data) => this.controller.handleMnemonicRestore(data),
+      onCancel: () => this.controller.hideRestoreForm(),
+      onModeChange: (mode) => this.controller.setRestoreMode(mode),
+      onToggleAdvanced: (currentValues) => this.controller.toggleRestoreAdvanced(currentValues),
+      onInputChange: (values) => this.controller.updateMnemonicRestoreState(values),
     });
 
     if (state.status === 'locked') {

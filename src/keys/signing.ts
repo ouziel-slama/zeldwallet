@@ -114,7 +114,7 @@ export async function signMessageBip322Simple(
 
   const bufferCtor = typeof globalThis.Buffer !== 'undefined' ? globalThis.Buffer : NodeBuffer;
   if (typeof globalThis.Buffer === 'undefined') {
-    (globalThis as any).Buffer = bufferCtor;
+    (globalThis as unknown as { Buffer: typeof Buffer }).Buffer = bufferCtor;
   }
 
   const scriptSig = buildBip322SimpleChallenge(message);
@@ -139,7 +139,9 @@ export async function signMessageBip322Simple(
     tapInternalKey: bufferCtor.from(xOnlyPublicKey),
   });
 
-  const getTaprootHashForSig = (psbt as any).getTaprootHashForSig?.bind(psbt);
+  type PsbtWithTaprootHash = bitcoin.Psbt & { getTaprootHashForSig?: (index: number, pubkey: Buffer, sighashType: number) => Buffer };
+  const psbtWithTaproot = psbt as PsbtWithTaprootHash;
+  const getTaprootHashForSig = psbtWithTaproot.getTaprootHashForSig?.bind(psbt);
   if (!getTaprootHashForSig) {
     throw new Error('Taproot signing requires PSBT taproot hash support');
   }

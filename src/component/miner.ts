@@ -75,13 +75,32 @@ export interface ZeldOutput {
   amount: number; // minimal units (8 decimals)
 }
 
-/** Error thrown when funds are insufficient */
-export class InsufficientFundsError extends Error {
-  readonly code = 'INSUFFICIENT_FUNDS';
+/** Error codes for miner errors */
+export type MinerErrorCode =
+  | 'MINER_NO_UTXO'
+  | 'MINER_INSUFFICIENT_BTC'
+  | 'MINER_INSUFFICIENT_ZELD'
+  | 'MINER_INSUFFICIENT_BTC_FOR_ZELD'
+  | 'MINER_INVALID_TARGET_ZEROS';
 
+/** Error thrown when funds are insufficient or other miner errors */
+export class MinerError extends Error {
+  readonly code: MinerErrorCode;
+  readonly params: Record<string, string | number>;
+
+  constructor(code: MinerErrorCode, params: Record<string, string | number> = {}) {
+    super(code);
+    this.name = 'MinerError';
+    this.code = code;
+    this.params = params;
+  }
+}
+
+/** @deprecated Use MinerError instead */
+export class InsufficientFundsError extends MinerError {
   constructor(message: string) {
-    super(message);
-    this.name = 'InsufficientFundsError';
+    // Legacy support: parse old messages or use generic code
+    super('MINER_INSUFFICIENT_BTC', { message });
   }
 }
 
@@ -129,7 +148,7 @@ function utxoToTxInput(utxo: UtxoInfo, address: string, network: NetworkType): T
  * Prepares inputs/outputs for a simple hunt (no BTC or Zeld sending).
  *
  * Algorithm:
- * - Input: Select the smallest UTXO from payment address that has > DUST + MIN_FEE_RESERVE sats.
+ * - Input: Select the smallest UTXO from payment address that has > 2 * DUST sats.
  * - Outputs:
  *   1. Ordinals address, value = DUST (330 sats), change = false
  *   2. Payment address, value = null, change = true (BTC change)
@@ -142,17 +161,15 @@ export function prepareSimpleHunt(
   useGpu: boolean,
   network: NetworkType = 'mainnet'
 ): MinerArgs {
-  const minRequired = DUST + MIN_FEE_RESERVE;
+  const minRequired = 2 * DUST;
 
   // Filter confirmed UTXOs with enough value, sort by value ascending
   const viableUtxos = paymentUtxos
-    .filter((u) => u.status.confirmed && u.value >= minRequired)
+    .filter((u) => u.status.confirmed && u.value > minRequired)
     .sort((a, b) => a.value - b.value);
 
   if (viableUtxos.length === 0) {
-    throw new InsufficientFundsError(
-      `No UTXO with sufficient funds. Need >= ${minRequired} sats, but no payment UTXO qualifies.`
-    );
+    throw new MinerError('MINER_NO_UTXO', { required: minRequired });
   }
 
   // Select the smallest viable UTXO
@@ -213,9 +230,7 @@ export function prepareBtcSendHunt(
   }
 
   if (totalSelected < minRequired) {
-    throw new InsufficientFundsError(
-      `Insufficient funds for BTC send. Need ${minRequired} sats, but only have ${totalSelected} sats available.`
-    );
+    throw new MinerError('MINER_INSUFFICIENT_BTC', { required: minRequired, available: totalSelected });
   }
 
   const inputs: TxInput[] = selectedUtxos.map((u) => utxoToTxInput(u, paymentAddress, network));
@@ -259,7 +274,7 @@ export function prepareZeldSendHunt(
   useGpu: boolean,
   network: NetworkType = 'mainnet'
 ): MinerArgs {
-  const minBtcRequired = 2 * DUST + MIN_FEE_RESERVE;
+  const minBtcRequired = 2 * DUST;
 
   // Step 1: Select Ordinals UTXOs to cover zeld_output.amount
   // Sort by zeldBalance descending (greedy)
@@ -279,9 +294,7 @@ export function prepareZeldSendHunt(
   }
 
   if (totalZeldSelected < zeldOutput.amount) {
-    throw new InsufficientFundsError(
-      `Insufficient Zeld balance. Need ${zeldOutput.amount} but only have ${totalZeldSelected} available.`
-    );
+    throw new MinerError('MINER_INSUFFICIENT_ZELD', { required: zeldOutput.amount, available: totalZeldSelected });
   }
 
   // Step 2: Check if we have enough BTC, add more UTXOs if needed
@@ -319,9 +332,7 @@ export function prepareZeldSendHunt(
   }
 
   if (totalBtcSelected < minBtcRequired) {
-    throw new InsufficientFundsError(
-      `Insufficient BTC for Zeld send. Need ${minBtcRequired} sats but only have ${totalBtcSelected} sats available.`
-    );
+    throw new MinerError('MINER_INSUFFICIENT_BTC_FOR_ZELD', { required: minBtcRequired, available: totalBtcSelected });
   }
 
   // Build inputs
@@ -374,7 +385,7 @@ export function prepareMinerArgs(
 ): MinerArgs {
   // Validate target zeros
   if (targetZeros < 6 || targetZeros > 10) {
-    throw new Error(`Invalid targetZeros: ${targetZeros}. Must be between 6 and 10.`);
+    throw new MinerError('MINER_INVALID_TARGET_ZEROS', { value: targetZeros });
   }
 
   // Case 3: Hunt with Zeld sending

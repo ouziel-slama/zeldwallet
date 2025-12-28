@@ -1,10 +1,23 @@
 import type { NetworkType } from '../types';
 import { getStrings, type LocaleKey } from './i18n';
+import type { MinerErrorCode } from './miner';
+
+/**
+ * Helper to replace placeholders in a string with values from params.
+ * Replaces {key} with params[key].
+ */
+function interpolate(template: string, params: Record<string, string | number>): string {
+  return template.replace(/\{(\w+)\}/g, (_, key) => {
+    const value = params[key];
+    return value !== undefined ? String(value) : `{${key}}`;
+  });
+}
 
 export const describeError = (error: unknown, locale: LocaleKey): string => {
   const strings = getStrings(locale);
   const code = (error as { code?: string })?.code;
   const expectedNetwork = (error as { expected?: NetworkType })?.expected;
+  const params = (error as { params?: Record<string, string | number> })?.params ?? {};
 
   if (code === 'wrong-network') {
     const networkLabel =
@@ -21,6 +34,21 @@ export const describeError = (error: unknown, locale: LocaleKey): string => {
   if (code === 'wallet-no-provider') return strings.walletNoProviderResponse;
   if (code === 'user-cancelled') return strings.walletUserCancelled;
   if (code === 'user-cancelled-signing') return strings.walletUserCancelledSigning;
+
+  // Miner errors
+  const minerErrorMap: Record<MinerErrorCode, keyof typeof strings> = {
+    'MINER_NO_UTXO': 'minerErrorNoUtxo',
+    'MINER_INSUFFICIENT_BTC': 'minerErrorInsufficientBtc',
+    'MINER_INSUFFICIENT_ZELD': 'minerErrorInsufficientZeld',
+    'MINER_INSUFFICIENT_BTC_FOR_ZELD': 'minerErrorInsufficientBtcForZeld',
+    'MINER_INVALID_TARGET_ZEROS': 'minerErrorInvalidTargetZeros',
+  };
+
+  if (code && code in minerErrorMap) {
+    const key = minerErrorMap[code as MinerErrorCode];
+    const template = strings[key];
+    return interpolate(template, params);
+  }
 
   if (!error) return strings.error;
   if (error instanceof Error) return error.message || strings.error;

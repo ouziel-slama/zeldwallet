@@ -272,10 +272,36 @@ export const componentStyles = `
   .zeldwallet-status--error {
     color: #b91c1c;
   }
+  .zeldwallet-ready-block {
+    position: relative;
+    margin: 12px 0;
+  }
+  .zeldwallet-ready-block::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    width: 1px;
+    background: #e5e7eb;
+    transform: translateX(-50%);
+  }
+  .zeldwallet-status-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    padding: 8px 12px 6px;
+  }
+  .zeldwallet-status-row .zeldwallet-status {
+    margin: 0;
+  }
+  /* Desktop: hide the titles row completely */
+  .zeldwallet-status-row.zeldwallet-mobile-tabs {
+    display: none;
+  }
   .zeldwallet-rows {
     display: grid;
     gap: 10px;
-    margin: 12px 0;
   }
   .zeldwallet-row {
     display: grid;
@@ -286,10 +312,11 @@ export const componentStyles = `
   }
   .zeldwallet-row-left {
     display: grid;
-    grid-template-columns: auto 1fr auto;
+    grid-template-columns: auto 1fr;
     align-items: center;
     gap: 8px;
     min-width: 0;
+    padding-right: 12px;
   }
   .zeldwallet-row-right {
     display: flex;
@@ -342,7 +369,7 @@ export const componentStyles = `
     animation: zeldwallet-spin 1s linear infinite;
   }
   .zeldwallet-footer {
-    margin-top: 8px;
+    margin-top: 16px;
     padding-top: 10px;
     border-top: 1px solid #e5e7eb;
     display: flex;
@@ -502,6 +529,12 @@ export const componentStyles = `
     text-overflow: ellipsis;
     min-width: 0;
   }
+  .zeldwallet-value-with-copy {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
   .zeldwallet-copy {
     border: 1px solid #cbd5e1;
     background: #f8fafc;
@@ -520,6 +553,22 @@ export const componentStyles = `
     display: inline-flex;
     align-items: center;
     justify-content: center;
+  }
+  .zeldwallet-address-copy {
+    border: none;
+    background: transparent;
+    padding: 0;
+    color: #475569;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 20px;
+    width: 20px;
+  }
+  .zeldwallet-address-copy:hover:not(:disabled) {
+    border: none;
+    background: transparent;
+    color: #0f172a;
   }
   .zeldwallet-copied {
     background: #dcfce7;
@@ -567,6 +616,207 @@ export const componentStyles = `
     padding-bottom: 16px;
     border-bottom: 1px solid #e5e7eb;
     margin-bottom: 12px;
+  }
+  .zeldwallet-restore-form {
+    margin: 8px 0 0;
+    padding-bottom: 16px;
+    border-bottom: 1px solid #e5e7eb;
+    margin-bottom: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .zeldwallet-restore-textarea {
+    width: 100%;
+    max-width: 100%;
+    min-height: 80px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+    background: #ffffff;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: 13px;
+    color: #0f172a;
+    resize: vertical;
+    box-sizing: border-box;
+    overflow-wrap: anywhere;
+  }
+  .zeldwallet-restore-textarea:focus {
+    outline: none;
+    border-color: #f5d900;
+  }
+  .zeldwallet-restore-password-input {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+    background: #ffffff;
+    font-size: 14px;
+    color: #0f172a;
+    padding-right: 44px;
+    box-sizing: border-box;
+  }
+  .zeldwallet-restore-password-input:focus {
+    outline: none;
+    border-color: #f5d900;
+  }
+  /* Restore form mode toggle */
+  .zeldwallet-restore-mode-toggle {
+    display: flex;
+    gap: 4px;
+    padding: 4px;
+    background: #f1f5f9;
+    border-radius: 8px;
+    margin-bottom: 8px;
+  }
+  .zeldwallet-restore-mode-btn {
+    flex: 1;
+    padding: 8px 12px;
+    border: none;
+    background: transparent;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    color: #64748b;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+  .zeldwallet-restore-mode-btn:hover {
+    color: #0f172a;
+    background: rgba(255, 255, 255, 0.5);
+  }
+  .zeldwallet-restore-mode-btn--active {
+    background: #ffffff;
+    color: #0f172a;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  }
+  .zeldwallet-hidden {
+    display: none !important;
+  }
+  /* Mnemonic input styles */
+  .zeldwallet-restore-mnemonic-input {
+    min-height: 100px;
+    font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    word-spacing: 4px;
+  }
+  .zeldwallet-restore-new-password-input,
+  .zeldwallet-restore-confirm-password-input {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+    background: #ffffff;
+    font-size: 14px;
+    color: #0f172a;
+    padding-right: 44px;
+    box-sizing: border-box;
+  }
+  .zeldwallet-restore-new-password-input:focus,
+  .zeldwallet-restore-confirm-password-input:focus {
+    outline: none;
+    border-color: #f5d900;
+  }
+  /* Advanced options section */
+  .zeldwallet-restore-advanced {
+    margin-top: 4px;
+  }
+  .zeldwallet-restore-advanced-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    padding: 8px 0;
+    border: none;
+    background: transparent;
+    font-size: 13px;
+    font-weight: 500;
+    color: #64748b;
+    cursor: pointer;
+    transition: color 0.2s ease;
+  }
+  .zeldwallet-restore-advanced-toggle:hover {
+    color: #0f172a;
+  }
+  .zeldwallet-restore-advanced-toggle .zeldwallet-chevron-icon {
+    transition: transform 0.2s ease;
+  }
+  .zeldwallet-restore-advanced--open .zeldwallet-restore-advanced-toggle .zeldwallet-chevron-icon {
+    transform: rotate(180deg);
+  }
+  .zeldwallet-restore-advanced-content {
+    display: none;
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px 0;
+  }
+  .zeldwallet-restore-advanced--open .zeldwallet-restore-advanced-content {
+    display: flex;
+  }
+  .zeldwallet-restore-path-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .zeldwallet-restore-path-label {
+    font-size: 12px;
+    font-weight: 500;
+    color: #64748b;
+  }
+  .zeldwallet-restore-path-input {
+    width: 100%;
+    padding: 8px 12px;
+    border-radius: 6px;
+    border: 1px solid #e2e8f0;
+    background: #f8fafc;
+    font-size: 13px;
+    font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+    color: #0f172a;
+    box-sizing: border-box;
+  }
+  .zeldwallet-restore-path-input:focus {
+    outline: none;
+    border-color: #f5d900;
+    background: #ffffff;
+  }
+  /* Dark mode for mnemonic restore */
+  :host(.dark-card) .zeldwallet-restore-mode-toggle {
+    background: #1e1e28;
+  }
+  :host(.dark-card) .zeldwallet-restore-mode-btn {
+    color: #94a3b8;
+  }
+  :host(.dark-card) .zeldwallet-restore-mode-btn:hover {
+    color: #e8e6e3;
+    background: rgba(255, 255, 255, 0.1);
+  }
+  :host(.dark-card) .zeldwallet-restore-mode-btn--active {
+    background: #12121a;
+    color: #e8e6e3;
+  }
+  :host(.dark-card) .zeldwallet-restore-new-password-input,
+  :host(.dark-card) .zeldwallet-restore-confirm-password-input {
+    background: #12121a;
+    border-color: #1e1e28;
+    color: #e8e6e3;
+  }
+  :host(.dark-card) .zeldwallet-restore-advanced-toggle {
+    color: #94a3b8;
+  }
+  :host(.dark-card) .zeldwallet-restore-advanced-toggle:hover {
+    color: #e8e6e3;
+  }
+  :host(.dark-card) .zeldwallet-restore-path-label {
+    color: #94a3b8;
+  }
+  :host(.dark-card) .zeldwallet-restore-path-input {
+    background: #1e1e28;
+    border-color: #2a2a36;
+    color: #e8e6e3;
+  }
+  :host(.dark-card) .zeldwallet-restore-path-input:focus {
+    background: #12121a;
   }
   .zeldwallet-backup-result {
     border: none;
@@ -622,6 +872,9 @@ export const componentStyles = `
   }
   :host(.dark-card) .zeldwallet-footer {
     border-top-color: #1e1e28;
+  }
+  :host(.dark-card) .zeldwallet-ready-block::after {
+    background: #1e1e28;
   }
   :host(.dark-card) .zeldwallet-status,
   :host(.dark-card) .zeldwallet-backup-result-hint {
@@ -689,12 +942,22 @@ export const componentStyles = `
     border: 1px solid #e8e6e3;
     color: #e8e6e3;
   }
+  :host(.dark-card) .zeldwallet-address-copy {
+    background: transparent;
+    border: none;
+    color: #e8e6e3;
+  }
   :host(.dark-card) .zeldwallet-install-link:hover,
   :host(.dark-card) .zeldwallet-copy:hover:not(:disabled),
   :host(.dark-card) .zeldwallet-set-password-button:hover,
   :host(.dark-card) .zeldwallet-connect-wallet:hover {
     background: rgba(232, 230, 227, 0.08);
     border-color: #ffffff;
+    color: #ffffff;
+  }
+  :host(.dark-card) .zeldwallet-address-copy:hover:not(:disabled) {
+    background: transparent;
+    border: none;
     color: #ffffff;
   }
   :host(.dark-card) .zeldwallet-badge {
@@ -727,8 +990,15 @@ export const componentStyles = `
     color: #e8e6e3;
   }
   :host(.dark-card) .zeldwallet-set-password-form,
-  :host(.dark-card) .zeldwallet-backup-form {
+  :host(.dark-card) .zeldwallet-backup-form,
+  :host(.dark-card) .zeldwallet-restore-form {
     border-bottom-color: #1e1e28;
+  }
+  :host(.dark-card) .zeldwallet-restore-textarea,
+  :host(.dark-card) .zeldwallet-restore-password-input {
+    background: #12121a;
+    border-color: #1e1e28;
+    color: #e8e6e3;
   }
   :host(.dark-card) .zeldwallet-cancel-icon:hover {
     border-color: #fca5a5;
@@ -755,7 +1025,8 @@ export const componentStyles = `
     text-align: left;
     unicode-bidi: embed;
   }
-  .zeldwallet-rtl .zeldwallet-backup-textarea {
+  .zeldwallet-rtl .zeldwallet-backup-textarea,
+  .zeldwallet-rtl .zeldwallet-restore-textarea {
     direction: ltr;
     text-align: left;
   }
@@ -925,8 +1196,9 @@ export const componentStyles = `
   .zeldwallet-hunting-controls {
     display: flex;
     align-items: center;
-    gap: 12px;
+    justify-content: space-between;
     flex-wrap: wrap;
+    gap: 8px 0;
   }
   .zeldwallet-hunting-checkbox {
     display: inline-flex;
@@ -971,6 +1243,13 @@ export const componentStyles = `
     font-weight: 700;
     color: #f7931a;
   }
+  .zeldwallet-hunt-button-row {
+    /* Takes full width to force new line, centers the button inside */
+    flex: 1 1 100%;
+    display: flex;
+    justify-content: center;
+    margin-top: 8px;
+  }
   .zeldwallet-hunt-button {
     display: inline-flex;
     align-items: center;
@@ -984,7 +1263,6 @@ export const componentStyles = `
     font-size: 14px;
     cursor: pointer;
     transition: all 0.15s ease;
-    margin-left: auto;
   }
   .zeldwallet-hunt-button:hover:not(:disabled) {
     background: linear-gradient(135deg, #e67e00 0%, #cc6e00 100%);
@@ -999,12 +1277,10 @@ export const componentStyles = `
   }
   .zeldwallet-hunt-button-wrapper {
     display: inline-flex;
-    margin-left: auto;
     cursor: not-allowed;
     position: relative;
   }
   .zeldwallet-hunt-button-wrapper .zeldwallet-hunt-button {
-    margin-left: 0;
     pointer-events: none;
   }
   /* Ensure tooltip on hunt button wrapper is visible and properly positioned */
@@ -1097,7 +1373,6 @@ export const componentStyles = `
     position: relative;
     display: inline-flex;
     align-items: center;
-    margin-left: auto;
   }
   .zeldwallet-fee-toggle {
     display: inline-flex;
@@ -1144,7 +1419,7 @@ export const componentStyles = `
   .zeldwallet-fee-dropdown {
     position: absolute;
     top: calc(100% + 4px);
-    left: 0;
+    right: 0;
     z-index: 50;
     background: #ffffff;
     border: 1px solid #e2e8f0;
@@ -1692,6 +1967,20 @@ export const componentStyles = `
     color: #f7931a;
     white-space: nowrap;
     flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 2px;
+  }
+
+  .zeldwallet-confirm-zeld {
+    font-size: 11px;
+    font-weight: 600;
+    color: #d4af37;
+  }
+
+  .zeldwallet-confirm-row-opreturn .zeldwallet-confirm-address {
+    font-size: 11px;
   }
 
   .zeldwallet-confirm-summary {
@@ -1721,6 +2010,30 @@ export const componentStyles = `
 
   .zeldwallet-confirm-fee {
     color: #dc2626;
+  }
+
+  .zeldwallet-confirm-mempool-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    width: 100%;
+    padding: 12px 16px;
+    margin-top: 16px;
+    border: 1px solid #a7f3d0;
+    border-radius: 8px;
+    background: #fff;
+    color: #059669;
+    font-size: 14px;
+    font-weight: 600;
+    text-decoration: none;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .zeldwallet-confirm-mempool-link:hover {
+    background: #ecfdf5;
+    border-color: #059669;
   }
 
   .zeldwallet-confirm-actions {
@@ -1801,6 +2114,10 @@ export const componentStyles = `
     color: #d4af37;
   }
 
+  :host(.dark-card) .zeldwallet-confirm-zeld {
+    color: #f5d65a;
+  }
+
   :host(.dark-card) .zeldwallet-confirm-summary {
     border-top-color: #2d2d3a;
   }
@@ -1811,6 +2128,16 @@ export const componentStyles = `
 
   :host(.dark-card) .zeldwallet-confirm-fee {
     color: #fca5a5;
+  }
+
+  :host(.dark-card) .zeldwallet-confirm-mempool-link {
+    background: #1e1e28;
+    border-color: #059669;
+    color: #6ee7b7;
+  }
+
+  :host(.dark-card) .zeldwallet-confirm-mempool-link:hover {
+    background: #0d3320;
   }
 
   :host(.dark-card) .zeldwallet-confirm-btn-confirm {
@@ -1831,6 +2158,179 @@ export const componentStyles = `
 
   :host(.dark-card) .zeldwallet-confirm-btn-cancel:hover {
     background: #2d2d3a;
+  }
+
+  /* ======================================================
+     Mobile Responsive: Tabs for Addresses/Balances columns
+     ====================================================== */
+  
+  /* Mobile tab button base styles (hidden on desktop) */
+  .zeldwallet-mobile-tab {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    padding: 8px 12px;
+    font-size: 13px;
+    font-weight: 600;
+    transition: all 0.15s ease;
+  }
+  
+  /* On desktop: hide the button styling, show as regular text */
+  @media (min-width: 481px) {
+    .zeldwallet-mobile-tab {
+      cursor: default;
+      pointer-events: none;
+    }
+  }
+  
+  /* Mobile breakpoint: < 480px */
+  @media (max-width: 480px) {
+    /* Status row becomes tabs container */
+    .zeldwallet-status-row.zeldwallet-mobile-tabs {
+      display: flex;
+      gap: 0;
+      padding: 0;
+      border-bottom: 1px solid #e5e7eb;
+      margin-bottom: 12px;
+    }
+    
+    /* Tab button styling */
+    .zeldwallet-mobile-tab {
+      flex: 1;
+      text-align: center;
+      margin: 0;
+      padding: 10px 8px;
+      border-radius: 8px 8px 0 0;
+      color: #64748b;
+      position: relative;
+    }
+    
+    .zeldwallet-mobile-tab:hover {
+      color: #0f172a;
+      background: rgba(0, 0, 0, 0.03);
+    }
+    
+    .zeldwallet-mobile-tab--active {
+      color: #0f172a;
+      background: transparent;
+    }
+    
+    /* On mobile: hide underline for inactive tabs, show only for active */
+    .zeldwallet-mobile-tab::after {
+      display: none;
+    }
+    
+    .zeldwallet-mobile-tab--active::after {
+      display: block;
+      content: '';
+      position: absolute;
+      bottom: -1px;
+      left: 10%;
+      right: 10%;
+      height: 2px;
+      background: #f7931a;
+      border-radius: 2px 2px 0 0;
+    }
+    
+    /* Hide the vertical divider on mobile */
+    .zeldwallet-ready-block::after {
+      display: none;
+    }
+    
+    /* Reduce gap between rows on mobile */
+    .zeldwallet-rows {
+      gap: 0;
+    }
+    
+    /* Rows: show only the active column */
+    .zeldwallet-row {
+      display: block;
+      padding: 0 12px;
+    }
+    
+    /* By default, hide both columns */
+    .zeldwallet-row-left.zeldwallet-mobile-col-addresses,
+    .zeldwallet-row-right.zeldwallet-mobile-col-balances {
+      display: none;
+    }
+    
+    /* Show addresses column when addresses tab is active */
+    [data-mobile-tab="addresses"] .zeldwallet-mobile-col-addresses {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 0;
+      min-height: 32px;
+    }
+    
+    /* Show balances column when balances tab is active */
+    [data-mobile-tab="balances"] .zeldwallet-mobile-col-balances {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      padding: 8px 0;
+      min-height: 32px;
+    }
+    
+    /* Keep balance values right-aligned on mobile (like desktop) */
+    [data-mobile-tab="balances"] .zeldwallet-balance-value {
+      justify-content: flex-end;
+    }
+    
+    /* Add separator between rows on mobile */
+    [data-mobile-tab="balances"] .zeldwallet-row:not(:last-child),
+    [data-mobile-tab="addresses"] .zeldwallet-row:not(:last-child) {
+      border-bottom: 1px solid #e5e7eb;
+    }
+    
+    /* Show label above address on mobile addresses tab */
+    [data-mobile-tab="addresses"] .zeldwallet-mobile-col-addresses .zeldwallet-label {
+      font-size: 12px;
+      color: #64748b;
+    }
+    
+    /* Dark mode mobile styles */
+    :host(.dark-card) .zeldwallet-status-row.zeldwallet-mobile-tabs {
+      border-bottom-color: #1e1e28;
+    }
+    
+    :host(.dark-card) .zeldwallet-mobile-tab {
+      color: #9ca3af;
+    }
+    
+    :host(.dark-card) .zeldwallet-mobile-tab:hover {
+      color: #e8e6e3;
+      background: rgba(255, 255, 255, 0.03);
+    }
+    
+    :host(.dark-card) .zeldwallet-mobile-tab--active {
+      color: #e8e6e3;
+    }
+    
+    :host(.dark-card) .zeldwallet-mobile-tab--active::after {
+      background: #d4af37;
+    }
+    
+    :host(.dark-card) [data-mobile-tab="balances"] .zeldwallet-row:not(:last-child),
+    :host(.dark-card) [data-mobile-tab="addresses"] .zeldwallet-row:not(:last-child) {
+      border-bottom-color: #1e1e28;
+    }
+    
+    :host(.dark-card) [data-mobile-tab="addresses"] .zeldwallet-mobile-col-addresses .zeldwallet-label {
+      color: #9ca3af;
+    }
+    
+    /* Larger margin for hunt button row on mobile */
+    .zeldwallet-hunt-button-row {
+      margin-top: 16px;
+    }
+    
+    /* Mining result actions: Sign and Broadcast on its own line, Cancel and Copy on second line */
+    .zeldwallet-mining-broadcast {
+      flex: 1 1 100%;
+      justify-content: center;
+    }
   }
 `;
 

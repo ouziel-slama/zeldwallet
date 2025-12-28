@@ -1,0 +1,54 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [0.1.0] - 2025-12-28
+
+### Added
+
+- **Core Wallet Features**
+  - BIP32/39/44/49/84/86 key derivation for Legacy, SegWit, Nested SegWit, and Taproot addresses
+  - Secure storage with AES-256-GCM encryption and PBKDF2 key derivation (600k iterations)
+  - Password-optional wallet creation for quick onboarding
+  - Message signing (ECDSA and BIP-322)
+  - PSBT signing support
+
+- **WBIP Provider**
+  - WBIP004/005/006 compatible provider registration
+  - Full sats-connect integration for wallet discovery
+  - Supported methods: `getInfo`, `getAddresses`, `signMessage`, `signPsbt`
+
+- **UI Components**
+  - `<zeld-wallet-ui>` Web Component with Shadow DOM encapsulation
+  - `<ZeldWalletCard>` React component wrapper
+  - `useZeldWalletController` React hook for custom UI
+  - Built-in confirmation modal for signing requests
+  - Dark/light theme variants
+  - Internationalization support (30 languages)
+
+- **Miner Integration**
+  - Built-in zeldhash-miner support in the UI component for Zeld hunting
+  - Support for simple hunt, BTC sending, and Zeld sending modes
+  - Automatic UTXO selection with dust threshold handling
+
+- **Backup & Recovery**
+  - Mnemonic export/import
+  - Encrypted backup export/import with separate backup password
+  - Network switching (mainnet/testnet)
+
+### Security
+
+- AES-256-GCM encryption for wallet data at rest
+- PBKDF2 with 600,000 iterations for password-based key derivation
+- Non-extractable CryptoKey usage where browser supports
+- Automatic memory cleanup on wallet lock
+
+### Other
+
+- Dual licensing under MIT or Apache-2.0
+
+[0.1.0]: https://github.com/ouziel-slama/zeldwallet/releases/tag/v0.1.0
+

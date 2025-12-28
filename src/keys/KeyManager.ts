@@ -21,16 +21,17 @@ ensureEcc();
 
 function ensureBuffer(): typeof Buffer {
   if (typeof globalThis.Buffer === 'undefined') {
-    (globalThis as any).Buffer = NodeBuffer;
+    (globalThis as unknown as { Buffer: typeof Buffer }).Buffer = NodeBuffer;
   }
   return globalThis.Buffer;
 }
 
+type EccWithSchnorr = typeof ecc & { signSchnorr?: (msg: Uint8Array, priv: Uint8Array) => Uint8Array };
 const schnorrImpl =
-  (ecc as any).signSchnorr
+  (ecc as EccWithSchnorr).signSchnorr
     ? {
         sign: (msg: Uint8Array, priv: Uint8Array) =>
-          Promise.resolve((ecc as any).signSchnorr(msg, priv)),
+          Promise.resolve((ecc as EccWithSchnorr).signSchnorr!(msg, priv)),
       }
     : undefined;
 
@@ -283,15 +284,88 @@ export class KeyManager {
   }
 
   /**
-   * Get addresses for specified purposes (WBIP compatible)
+   * Derive a Bitcoin address from a custom derivation path string.
+   * @param path - Full derivation path (e.g., "m/84'/0'/0'/0/0")
+   * @returns DerivedAddress with address, publicKey, path, and type
    */
-  getAddresses(purposes: AddressPurpose[]): AddressInfo[] {
+  deriveAddressFromPath(path: string): DerivedAddress {
+    this.assertUnlocked();
+    
+    const parsed = parseDerivationPath(path);
+    if (!parsed) {
+      throw new Error(`Invalid derivation path format: ${path}`);
+    }
+    
+    const key = this.deriveKey(path);
+    
+    if (!key.publicKey) {
+      throw new Error('Failed to derive public key');
+    }
+
+    const bufferCtor = ensureBuffer();
+    ensureEcc();
+    const pubkeyBytes = new Uint8Array(key.publicKey);
+    if (!ecc.isPoint(pubkeyBytes)) {
+      throw new Error('Derived invalid public key');
+    }
+    const pubkeyBuffer = bufferCtor.from(pubkeyBytes);
+    if (!ecc.isPoint(pubkeyBuffer)) {
+      throw new Error('Derived invalid public key');
+    }
+
+    // Detect address type from purpose in path
+    const pathType = this.detectPathTypeFromPurpose(parsed.purpose);
+    const address = this.createAddress(pubkeyBuffer, pathType, bufferCtor);
+    
+    return {
+      address,
+      publicKey: bytesToHex(key.publicKey),
+      path,
+      type: pathTypeToAddressType(pathType),
+    };
+  }
+
+  /**
+   * Detect derivation path type from purpose number
+   */
+  private detectPathTypeFromPurpose(purpose: number): DerivationPathType {
+    switch (purpose) {
+      case 86:
+        return 'taproot';
+      case 84:
+        return 'nativeSegwit';
+      case 49:
+        return 'nestedSegwit';
+      case 44:
+      default:
+        return 'legacy';
+    }
+  }
+
+  /**
+   * Get addresses for specified purposes (WBIP compatible)
+   * @param purposes - Array of address purposes
+   * @param customPaths - Optional map of purpose to custom derivation path
+   */
+  getAddresses(purposes: AddressPurpose[], customPaths?: { payment?: string; ordinals?: string }): AddressInfo[] {
     const addresses: AddressInfo[] = [];
 
     for (const purpose of purposes) {
-      const addressType = purposeToAddressType(purpose);
-      const pathType = addressTypeToPathType(addressType);
-      const derived = this.deriveAddress(pathType, 0, 0, 0);
+      let derived: DerivedAddress;
+      
+      // Check if we have a custom path for this purpose
+      const customPath = purpose === 'payment' ? customPaths?.payment : 
+                         purpose === 'ordinals' ? customPaths?.ordinals : undefined;
+      
+      if (customPath) {
+        // Use custom path
+        derived = this.deriveAddressFromPath(customPath);
+      } else {
+        // Use default path
+        const addressType = purposeToAddressType(purpose);
+        const pathType = addressTypeToPathType(addressType);
+        derived = this.deriveAddress(pathType, 0, 0, 0);
+      }
 
       addresses.push({
         address: derived.address,
@@ -609,7 +683,7 @@ export class KeyManager {
     finalize: boolean = false
   ): void {
     const Buffer = ensureBuffer();
-    if (typeof (ecc as any).signSchnorr !== 'function') {
+    if (typeof (ecc as EccWithSchnorr).signSchnorr !== 'function') {
       throw new Error('Taproot signing requires Schnorr support in tiny-secp256k1');
     }
 
@@ -648,6 +722,13 @@ export class KeyManager {
       }
     }
 
+    // Ensure tapInternalKey is set for proper Taproot signing
+    if (!input.tapInternalKey) {
+      psbt.updateInput(inputIndex, {
+        tapInternalKey: xOnlyPubKeyBuffer,
+      });
+    }
+
     // Tweak private key for Taproot key-path spend
     const tweak = bitcoin.crypto.taggedHash('TapTweak', xOnlyPubKeyBuffer);
     const tweakedPrivateKey = ecc.privateAdd(evenPrivBuffer, tweak);
@@ -655,23 +736,28 @@ export class KeyManager {
       throw new Error('Failed to tweak private key for Taproot');
     }
 
-    // Hash to sign (gate on bitcoinjs version support)
-    const getTaprootHashForSig = (psbt as any).getTaprootHashForSig?.bind(psbt);
-    if (!getTaprootHashForSig) {
-      throw new Error('Taproot signing requires a bitcoinjs-lib version exposing getTaprootHashForSig');
+    // Compute tweaked public key for the signer
+    const tweakedPubKey = ecc.pointFromScalar(tweakedPrivateKey, true);
+    if (!tweakedPubKey) {
+      throw new Error('Failed to compute tweaked public key');
     }
-    const hash: Buffer = getTaprootHashForSig(inputIndex, xOnlyPubKeyBuffer, sighashType);
+    const tweakedXOnlyPubKey = Buffer.from(tweakedPubKey).slice(1);
 
-    // Schnorr signature (64 bytes) + optional sighash byte (BIP-341)
-    const sig = ecc.signSchnorr(hash, tweakedPrivateKey);
-    const finalSig =
-      sighashType === 0x00
-        ? Buffer.from(sig)
-        : Buffer.concat([Buffer.from(sig), Buffer.from([sighashType])]);
+    // Create a BIP340 Schnorr signer compatible with bitcoinjs-lib's signInput
+    // The Signer type requires a `sign` method, but for Taproot inputs,
+    // bitcoinjs-lib internally calls `signSchnorr` instead.
+    type TaprootSigner = { publicKey: Buffer; signSchnorr: (hash: Buffer) => Buffer };
+    const taprootSigner: TaprootSigner = {
+      publicKey: tweakedXOnlyPubKey,
+      signSchnorr: (hash: Buffer): Buffer => {
+        const sig = (ecc as EccWithSchnorr).signSchnorr!(hash, tweakedPrivateKey);
+        return Buffer.from(sig);
+      },
+    };
 
-    psbt.updateInput(inputIndex, {
-      tapKeySig: finalSig,
-    });
+    // Use the standard signInput API with the Schnorr signer
+    // bitcoinjs-lib expects a signer with signSchnorr for taproot inputs
+    psbt.signInput(inputIndex, taprootSigner as unknown as bitcoin.Signer, sighashType ? [sighashType] : undefined);
 
     // Attempt to finalize if requested; ignore if not yet possible
     if (finalize) {

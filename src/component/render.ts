@@ -1,4 +1,5 @@
 import { componentStyles } from './styles';
+import type { MobileActiveTab } from './state';
 import {
   buildViewModel,
   type ActionView,
@@ -11,15 +12,17 @@ import {
   type MiningProgressView,
   type MiningResultView,
   type RenderTemplateProps,
+  type RestoreFormView,
   type WalletViewModel,
   type WalletSwitcherView,
 } from './viewModel';
 
 // SVG icons for buttons
-const COPY_ICON = `<svg class="zeldwallet-btn-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`;
+const COPY_ICON = `<svg class="zeldwallet-btn-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/><path d="M16 4h2a2 2 0 0 1 2 2v4"/><path d="M21 14H11"/><path d="m15 10-4 4 4 4"/></svg>`;
 
 const COPIED_ICON = `<svg class="zeldwallet-btn-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
 const DOWNLOAD_ICON = `<svg class="zeldwallet-btn-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`;
+const UPLOAD_ICON = `<svg class="zeldwallet-btn-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>`;
 const CANCEL_ICON = `<svg class="zeldwallet-btn-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
 // Unlock icon for Connect button
 const UNLOCK_ICON = `<svg class="zeldwallet-btn-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>`;
@@ -32,7 +35,6 @@ const STOP_ICON = `<svg class="zeldwallet-btn-icon" width="16" height="16" viewB
 const PLAY_ICON = `<svg class="zeldwallet-btn-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>`;
 const BROADCAST_ICON = `<svg class="zeldwallet-btn-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><path d="M22 2L15 22L11 13L2 9L22 2Z"/></svg>`;
 const EXTERNAL_LINK_ICON = `<svg class="zeldwallet-btn-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>`;
-const REFRESH_ICON = `<svg class="zeldwallet-btn-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg>`;
 export { COPY_ICON, COPIED_ICON, DOWNLOAD_ICON, CANCEL_ICON, UNLOCK_ICON, CHECK_ICON, TARGET_ICON };
 
 const buildStatusBlock = (status?: WalletViewModel['status'], isGenerating?: boolean): string => {
@@ -194,27 +196,32 @@ const buildBalanceValue = (
   `;
 };
 
-const buildReadyBlock = (ready: WalletViewModel['ready']): string => {
+const buildReadyBlock = (ready: WalletViewModel['ready'], mobileActiveTab: MobileActiveTab): string => {
   if (!ready) return '';
+
+  const isAddressesActive = mobileActiveTab === 'addresses';
+  const isBalancesActive = mobileActiveTab === 'balances';
 
   const rows = ready.rows
     .map(
       (row) => `
         <div class="zeldwallet-row" part="row">
-          <div class="zeldwallet-row-left">
+          <div class="zeldwallet-row-left zeldwallet-mobile-col-addresses">
             ${
               row.icon && row.tooltip
                 ? `<span class="zeldwallet-label zeldwallet-label-icon" data-tooltip="${row.tooltip}" aria-label="${row.label}">${row.icon}</span>`
                 : `<span class="zeldwallet-label">${row.label}</span>`
             }
-            <span class="zeldwallet-value" title="${row.value ?? ''}">${row.truncatedValue ?? row.value ?? ''}</span>
-            ${
-              row.copyValue
-                ? `<button class="zeldwallet-copy zeldwallet-copy-icon" part="copy-button" type="button" data-copy="${row.copyValue}" data-tooltip="${row.copyLabel}" aria-label="${row.copyLabel}">${COPY_ICON}</button>`
-                : ''
-            }
+            <div class="zeldwallet-value-with-copy">
+              <span class="zeldwallet-value" title="${row.value ?? ''}">${row.truncatedValue ?? row.value ?? ''}</span>
+              ${
+                row.copyValue
+                  ? `<button class="zeldwallet-copy zeldwallet-copy-icon zeldwallet-address-copy" part="copy-button" type="button" data-copy="${row.copyValue}" data-tooltip="${row.copyLabel}" aria-label="${row.copyLabel}">${COPY_ICON}</button>`
+                  : ''
+              }
+            </div>
           </div>
-          <div class="zeldwallet-row-right">
+          <div class="zeldwallet-row-right zeldwallet-mobile-col-balances">
             ${buildBalanceValue(ready.balance, row.balanceType)}
           </div>
         </div>
@@ -223,11 +230,24 @@ const buildReadyBlock = (ready: WalletViewModel['ready']): string => {
     .join('');
 
   return `
-      <div class="zeldwallet-status">
-        <div>${ready.readyHint}</div>
-      </div>
-      <div class="zeldwallet-rows">
-        ${rows}
+      <div class="zeldwallet-ready-block" data-mobile-tab="${mobileActiveTab}">
+        <div class="zeldwallet-status-row zeldwallet-mobile-tabs">
+          <button 
+            class="zeldwallet-status zeldwallet-mobile-tab${isAddressesActive ? ' zeldwallet-mobile-tab--active' : ''}" 
+            type="button"
+            data-mobile-tab-select="addresses"
+            aria-pressed="${isAddressesActive}"
+          >${ready.readyHint}</button>
+          <button 
+            class="zeldwallet-status zeldwallet-status-right zeldwallet-mobile-tab${isBalancesActive ? ' zeldwallet-mobile-tab--active' : ''}" 
+            type="button"
+            data-mobile-tab-select="balances"
+            aria-pressed="${isBalancesActive}"
+          >${ready.balancesHint}</button>
+        </div>
+        <div class="zeldwallet-rows">
+          ${rows}
+        </div>
       </div>
     `;
 };
@@ -342,6 +362,128 @@ const buildBackupResult = (backupResult: WalletViewModel['backupResult']): strin
     `;
 };
 
+const buildRestoreForm = (
+  restoreForm: RestoreFormView | undefined,
+  labels: WalletViewModel['labels']
+): string => {
+  if (!restoreForm) return '';
+  
+  const isBackupMode = restoreForm.mode === 'backup';
+  const isMnemonicMode = restoreForm.mode === 'mnemonic';
+  
+  // Mode toggle tabs
+  const modeToggle = `
+    <div class="zeldwallet-restore-mode-toggle">
+      <button type="button" class="zeldwallet-restore-mode-btn${isBackupMode ? ' zeldwallet-restore-mode-btn--active' : ''}" data-restore-mode="backup">
+        ${restoreForm.modeBackupLabel}
+      </button>
+      <button type="button" class="zeldwallet-restore-mode-btn${isMnemonicMode ? ' zeldwallet-restore-mode-btn--active' : ''}" data-restore-mode="mnemonic">
+        ${restoreForm.modeMnemonicLabel}
+      </button>
+    </div>
+  `;
+  
+  // Backup mode form fields
+  const backupFields = `
+    <div class="zeldwallet-restore-backup-fields${isBackupMode ? '' : ' zeldwallet-hidden'}">
+      <textarea
+        class="zeldwallet-restore-textarea"
+        name="restore-backup"
+        placeholder="${restoreForm.backupPlaceholder}"
+        ${isBackupMode ? 'required' : ''}
+      ></textarea>
+      <div class="zeldwallet-password-field" data-password-field>
+        <input
+          class="zeldwallet-restore-password-input"
+          type="password"
+          name="restore-password"
+          placeholder="${restoreForm.passwordPlaceholder}"
+          autocomplete="current-password"
+          ${isBackupMode ? 'required' : ''}
+        />
+        <button class="zeldwallet-toggle-visibility" type="button" aria-label="${labels.showPassword}">🐵</button>
+      </div>
+    </div>
+  `;
+  
+  // Mnemonic mode form fields
+  const advancedClass = restoreForm.showAdvanced ? 'zeldwallet-restore-advanced--open' : '';
+  const mnemonicFields = `
+    <div class="zeldwallet-restore-mnemonic-fields${isMnemonicMode ? '' : ' zeldwallet-hidden'}">
+      <textarea
+        class="zeldwallet-restore-textarea zeldwallet-restore-mnemonic-input"
+        name="restore-mnemonic"
+        placeholder="${restoreForm.mnemonicPlaceholder}"
+        ${isMnemonicMode ? 'required' : ''}
+      >${escapeHtml(restoreForm.mnemonic)}</textarea>
+      <div class="zeldwallet-password-field" data-password-field>
+        <input
+          class="zeldwallet-restore-new-password-input"
+          type="password"
+          name="restore-new-password"
+          placeholder="${restoreForm.newPasswordPlaceholder}"
+          autocomplete="new-password"
+          value="${escapeHtml(restoreForm.password)}"
+          ${isMnemonicMode ? 'required' : ''}
+        />
+        <button class="zeldwallet-toggle-visibility" type="button" aria-label="${labels.showPassword}">🐵</button>
+      </div>
+      <div class="zeldwallet-password-field" data-password-field>
+        <input
+          class="zeldwallet-restore-confirm-password-input"
+          type="password"
+          name="restore-confirm-password"
+          placeholder="${restoreForm.confirmPasswordPlaceholder}"
+          autocomplete="new-password"
+          value="${escapeHtml(restoreForm.confirmPassword)}"
+          ${isMnemonicMode ? 'required' : ''}
+        />
+        <button class="zeldwallet-toggle-visibility" type="button" aria-label="${labels.showPassword}">🐵</button>
+      </div>
+      <div class="zeldwallet-restore-advanced ${advancedClass}">
+        <button type="button" class="zeldwallet-restore-advanced-toggle" data-toggle-advanced>
+          ${CHEVRON_ICON} ${restoreForm.advancedOptionsLabel}
+        </button>
+        <div class="zeldwallet-restore-advanced-content">
+          <div class="zeldwallet-restore-path-field">
+            <label class="zeldwallet-restore-path-label">${restoreForm.paymentPathLabel}</label>
+            <input
+              class="zeldwallet-restore-path-input"
+              type="text"
+              name="restore-payment-path"
+              placeholder="${restoreForm.paymentPathPlaceholder}"
+              value="${escapeHtml(restoreForm.paymentPath)}"
+            />
+          </div>
+          <div class="zeldwallet-restore-path-field">
+            <label class="zeldwallet-restore-path-label">${restoreForm.ordinalsPathLabel}</label>
+            <input
+              class="zeldwallet-restore-path-input"
+              type="text"
+              name="restore-ordinals-path"
+              placeholder="${restoreForm.ordinalsPathPlaceholder}"
+              value="${escapeHtml(restoreForm.ordinalsPath)}"
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+  
+  return `
+      <form class="zeldwallet-restore-form" data-restore-mode="${restoreForm.mode}">
+        ${modeToggle}
+        ${backupFields}
+        ${mnemonicFields}
+        <div class="zeldwallet-set-password-actions">
+          <button class="zeldwallet-copy zeldwallet-copy-icon zeldwallet-restore-submit" type="submit" data-tooltip="${restoreForm.submitLabel}" aria-label="${restoreForm.submitLabel}">${UPLOAD_ICON}</button>
+          <button class="zeldwallet-set-password-cancel zeldwallet-restore-cancel zeldwallet-cancel-icon" type="button" data-tooltip="${restoreForm.cancelLabel}" aria-label="${restoreForm.cancelLabel}">${CANCEL_ICON}</button>
+        </div>
+        ${restoreForm.error ? `<div class="zeldwallet-password-error">${escapeHtml(restoreForm.error)}</div>` : ''}
+      </form>
+    `;
+};
+
 const buildActionsBlock = (actions: ActionView[], title: string): string => {
   if (!actions.length) return '';
   const buttons = actions
@@ -414,7 +556,8 @@ const buildMiningResult = (result: MiningResultView): string => {
     ? `<a class="zeldwallet-mining-mempool-link" href="${result.mempoolUrl}" target="_blank" rel="noopener noreferrer">${EXTERNAL_LINK_ICON} ${result.viewOnMempoolLabel}</a>`
     : '';
 
-  const copyPsbtButton = result.psbt
+  // Hide copy PSBT button when transaction is broadcast (mempool link is shown)
+  const copyPsbtButton = result.psbt && !result.showMempoolLink
     ? `<button class="zeldwallet-mining-copy-psbt zeldwallet-copy-icon" type="button" data-copy="${escapeHtml(result.psbt)}" data-tooltip="${result.copyPsbtLabel}">${COPY_ICON}</button>`
     : '';
 
@@ -427,43 +570,85 @@ const buildMiningResult = (result: MiningResultView): string => {
       <div class="zeldwallet-mining-result-actions">
         ${signButton}
         ${mempoolLink}
-        <button class="zeldwallet-mining-cancel" type="button" data-mining-cancel>${CANCEL_ICON} ${result.cancelLabel}</button>
+        <button class="zeldwallet-mining-cancel" type="button" data-mining-cancel>${result.showMempoolLink ? '' : CANCEL_ICON + ' '}${result.cancelLabel}</button>
         ${copyPsbtButton}
       </div>
     </div>
   `;
 };
 
-const buildMiningError = (error: string, retryLabel: string): string => `
+const buildMiningError = (error: string, closeLabel: string): string => `
   <div class="zeldwallet-mining-error">
     <span class="zeldwallet-mining-error-message">${escapeHtml(error)}</span>
-    <button class="zeldwallet-mining-retry" type="button" data-mining-retry>${REFRESH_ICON} ${retryLabel}</button>
+    <button class="zeldwallet-mining-cancel" type="button" data-mining-cancel>${CANCEL_ICON} ${closeLabel}</button>
   </div>
 `;
 
-const buildConfirmDialog = (dialog: ConfirmDialogView): string => {
+const buildConfirmDialog = (dialog: ConfirmDialogView, locale?: string): string => {
+  // Helper to format ZELD amounts (divide by 10^8) with locale-aware thousand separators
+  const formatZeldAmount = (amount: bigint): string => {
+    const divisor = 100_000_000n;
+    const integerPart = amount / divisor;
+    const remainder = amount % divisor;
+    const decimalStr = remainder.toString().padStart(8, '0');
+    // Remove trailing zeros but keep at least 2 decimals
+    const trimmed = decimalStr.replace(/0+$/, '') || '0';
+    const decimals = trimmed.length < 2 ? trimmed.padEnd(2, '0') : trimmed;
+    
+    // Format integer part with thousand separators
+    try {
+      const formattedInteger = new Intl.NumberFormat(locale || 'en').format(Number(integerPart));
+      // Get the decimal separator for this locale
+      const parts = new Intl.NumberFormat(locale || 'en').formatToParts(1.1);
+      const decimalSeparator = parts.find(p => p.type === 'decimal')?.value || '.';
+      return `${formattedInteger}${decimalSeparator}${decimals}`;
+    } catch {
+      return `${integerPart}.${decimals}`;
+    }
+  };
+
   const inputRows = dialog.inputs
     .map(
-      (input) => `
-        <div class="zeldwallet-confirm-row">
-          <span class="zeldwallet-confirm-address" title="${escapeHtml(input.address)}">${escapeHtml(input.addressTruncated)}</span>
-          <span class="zeldwallet-confirm-value">${input.valueFormatted} BTC</span>
-        </div>
-      `
+      (input) => {
+        // Format ZELD amount if present
+        const zeldDisplay = input.zeldAmount !== undefined && input.zeldAmount > 0n
+          ? `<span class="zeldwallet-confirm-zeld">${formatZeldAmount(input.zeldAmount)} ZELD</span>`
+          : '';
+        
+        return `
+          <div class="zeldwallet-confirm-row">
+            <span class="zeldwallet-confirm-address" title="${escapeHtml(input.address)}">${escapeHtml(input.addressTruncated)}</span>
+            <span class="zeldwallet-confirm-value">
+              ${input.valueFormatted} BTC
+              ${zeldDisplay}
+            </span>
+          </div>
+        `;
+      }
     )
     .join('');
 
   const outputRows = dialog.outputs
     .map(
-      (output) => `
-        <div class="zeldwallet-confirm-row">
-          <span class="zeldwallet-confirm-address" title="${escapeHtml(output.address)}">
-            ${escapeHtml(output.addressTruncated)}
-            ${output.isChange ? `<span class="zeldwallet-confirm-change">${dialog.changeLabel}</span>` : ''}
-          </span>
-          <span class="zeldwallet-confirm-value">${output.valueFormatted} BTC</span>
-        </div>
-      `
+      (output) => {
+        // Format ZELD amount if present (normalized by 10^8)
+        const zeldDisplay = output.zeldAmount !== undefined && output.zeldAmount > 0n
+          ? `<span class="zeldwallet-confirm-zeld">${formatZeldAmount(output.zeldAmount)} ZELD</span>`
+          : '';
+        
+        return `
+          <div class="zeldwallet-confirm-row${output.isOpReturn ? ' zeldwallet-confirm-row-opreturn' : ''}">
+            <span class="zeldwallet-confirm-address" title="${escapeHtml(output.address)}">
+              ${escapeHtml(output.addressTruncated)}
+              ${output.isChange ? `<span class="zeldwallet-confirm-change">${dialog.changeLabel}</span>` : ''}
+            </span>
+            <span class="zeldwallet-confirm-value">
+              ${output.isOpReturn ? '' : `${output.valueFormatted} BTC`}
+              ${zeldDisplay}
+            </span>
+          </div>
+        `;
+      }
     )
     .join('');
 
@@ -493,12 +678,20 @@ const buildConfirmDialog = (dialog: ConfirmDialogView): string => {
           </div>
         </div>
         
+        ${dialog.isBroadcast && dialog.mempoolUrl ? `
+          <a class="zeldwallet-confirm-mempool-link" href="${dialog.mempoolUrl}" target="_blank" rel="noopener noreferrer">
+            ${EXTERNAL_LINK_ICON} ${escapeHtml(dialog.viewOnMempoolLabel ?? 'View on mempool.space')}
+          </a>
+        ` : ''}
+        
         <div class="zeldwallet-confirm-actions">
-          <button class="zeldwallet-confirm-btn zeldwallet-confirm-btn-confirm" type="button" data-confirm-confirm>
-            ${CHECK_ICON} ${escapeHtml(dialog.confirmLabel)}
-          </button>
+          ${!dialog.isBroadcast ? `
+            <button class="zeldwallet-confirm-btn zeldwallet-confirm-btn-confirm" type="button" data-confirm-confirm>
+              ${CHECK_ICON} ${escapeHtml(dialog.confirmLabel)}
+            </button>
+          ` : ''}
           <button class="zeldwallet-confirm-btn zeldwallet-confirm-btn-cancel" type="button" data-confirm-cancel>
-            ${CANCEL_ICON} ${escapeHtml(dialog.cancelLabel)}
+            ${dialog.isBroadcast ? escapeHtml(dialog.closeLabel) : `${CANCEL_ICON} ${escapeHtml(dialog.cancelLabel)}`}
           </button>
         </div>
       </div>
@@ -581,11 +774,11 @@ const buildFeeSelector = (hunting: HuntingView): string => {
   `;
 };
 
-const buildHuntingBlock = (hunting: HuntingView | undefined): string => {
+const buildHuntingBlock = (hunting: HuntingView | undefined, locale?: string): string => {
   if (!hunting || !hunting.visible) return '';
 
   // Show confirmation dialog if visible
-  const confirmDialogBlock = hunting.confirmDialog ? buildConfirmDialog(hunting.confirmDialog) : '';
+  const confirmDialogBlock = hunting.confirmDialog ? buildConfirmDialog(hunting.confirmDialog, locale) : '';
 
   // Show mining result if we have one (with final stats)
   if (hunting.miningResult) {
@@ -603,7 +796,7 @@ const buildHuntingBlock = (hunting: HuntingView | undefined): string => {
   if (hunting.miningError && !hunting.isMining) {
     return `
       <div class="zeldwallet-hunting">
-        ${buildMiningError(hunting.miningError, hunting.retryLabel)}
+        ${buildMiningError(hunting.miningError, hunting.cancelLabel)}
       </div>
     `;
   }
@@ -687,6 +880,7 @@ const buildHuntingBlock = (hunting: HuntingView | undefined): string => {
           />
           ${hunting.sendZeldLabel}
         </label>
+        ${buildFeeSelector(hunting)}
         <div class="zeldwallet-hunting-slider">
           <span>${hunting.zeroCountLabel}</span>
           <input
@@ -708,8 +902,9 @@ const buildHuntingBlock = (hunting: HuntingView | undefined): string => {
           />
           ${hunting.useGpuLabel}
         </label>
-        ${buildFeeSelector(hunting)}
-        ${huntButton}
+        <div class="zeldwallet-hunt-button-row">
+          ${huntButton}
+        </div>
       </div>
     </div>
   `;
@@ -734,15 +929,18 @@ export const buildTemplate = (props: RenderTemplateProps): string => {
   const warningsBlock = buildSubtitle(view.header.warnings);
   const setPasswordForm = buildSetPasswordForm(view.setPasswordForm, view.labels);
   const lockedBlock = buildLockedBlock(view.locked, view.labels);
-  const readyBlock = buildReadyBlock(view.ready);
+  const readyBlock = buildReadyBlock(view.ready, state.mobileActiveTab);
   const backupForm = buildBackupForm(view.backupForm, view.labels);
   const backupResultBlock = buildBackupResult(view.backupResult);
+  const restoreFormBlock = buildRestoreForm(view.restoreForm, view.labels);
   const statusBlock = buildStatusBlock(view.status, state.status === 'generating' || state.status === 'recovering');
   const actionsBlock = buildActionsBlock(view.header.actions, props.strings.securityActionsLabel);
-  const huntingBlock = buildHuntingBlock(view.hunting);
+  const huntingBlock = buildHuntingBlock(view.hunting, props.locale);
   const walletSwitcherBlock = buildWalletSwitcher(view.walletSwitcher);
 
-  const headerContent = view.header.actions.length ? actionsBlock : warningsBlock;
+  // Show warnings (with flashing icon) when there are warnings, otherwise show regular actions
+  // Warnings already include the restore button when applicable
+  const headerContent = view.header.warnings.length ? warningsBlock : actionsBlock;
   const rtlClass = dir === 'rtl' ? ' zeldwallet-rtl' : '';
 
   return `
@@ -758,6 +956,7 @@ export const buildTemplate = (props: RenderTemplateProps): string => {
         ${setPasswordForm}
         ${backupForm}
         ${backupResultBlock}
+        ${restoreFormBlock}
         ${statusBlock}
         ${lockedBlock}
         ${readyBlock}
