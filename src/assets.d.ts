@@ -14,3 +14,9 @@ declare module '*.svg' {
   export default src;
 }
 
+// Optional peer dependency - types are inlined in controller.ts
+declare module 'zeldhash-miner' {
+  const content: unknown;
+  export = content;
+}
+

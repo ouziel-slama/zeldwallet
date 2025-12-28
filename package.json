@@ -3,7 +3,7 @@
   "overrides": {
     "valibot": "^1.2.0"
   },
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Lightweight JavaScript library for creating a Bitcoin wallet directly in the browser",
   "type": "module",
   "main": "./dist/zeldwallet.es.js",
@@ -25,7 +25,7 @@
   "peerDependencies": {
     "react": "^18.2.0 || ^19.0.0",
     "react-dom": "^18.2.0 || ^19.0.0",
-    "zeldhash-miner": "^0.2.0"
+    "zeldhash-miner": "^0.2.1"
   },
   "peerDependenciesMeta": {
     "react": {
@@ -39,7 +39,7 @@
     }
   },
   "scripts": {
-    "copy-wasm": "mkdir -p public/wasm && cp node_modules/zeldhash-miner/wasm/* public/wasm/ && cp node_modules/zeldhash-miner/dist/worker.js public/ && node -e \"const fs=require('fs');const p='public/worker.js';if(fs.existsSync(p)){const c=fs.readFileSync(p,'utf8').replace(/\\n?\\/\\/\\# sourceMappingURL=worker\\.js\\.map\\s*$/,'');fs.writeFileSync(p,c);}\"",
+    "copy-wasm": "node -e \"const fs=require('fs'),path=require('path');const minerPath='node_modules/zeldhash-miner';if(!fs.existsSync(minerPath)){console.log('zeldhash-miner not installed, skipping wasm copy');process.exit(0);}fs.mkdirSync('public/wasm',{recursive:true});const wasmDir=path.join(minerPath,'wasm');if(fs.existsSync(wasmDir)){fs.readdirSync(wasmDir).forEach(f=>fs.copyFileSync(path.join(wasmDir,f),path.join('public/wasm',f)));}const workerSrc=path.join(minerPath,'dist/worker.js');if(fs.existsSync(workerSrc)){let c=fs.readFileSync(workerSrc,'utf8').replace(/\\n?\\/\\/# sourceMappingURL=worker\\.js\\.map\\s*$/,'');fs.writeFileSync('public/worker.js',c);}\"",
     "dev": "npm run copy-wasm && vite",
     "build": "npm run copy-wasm && npm run lint && tsc && vite build",
     "preview": "vite preview",
