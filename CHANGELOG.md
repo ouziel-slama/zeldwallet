@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.12] - 2025-01-03
+
+### Fixed
+
+- Fixed Xverse wallet connection failing with "Invalid parameters" error on newer versions
+- Xverse now uses the `getAddress` helper from sats-connect instead of `wallet_connect` RPC method
+- Use `SatsPurpose` constants instead of string literals for better type safety
+
 ## [0.1.11] - 2025-01-03
 
 ### Fixed
@@ -143,6 +151,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Dual licensing under MIT or Apache-2.0
 
+[0.1.12]: https://github.com/ouziel-slama/zeldwallet/compare/v0.1.11...v0.1.12
 [0.1.11]: https://github.com/ouziel-slama/zeldwallet/compare/v0.1.10...v0.1.11
 [0.1.10]: https://github.com/ouziel-slama/zeldwallet/compare/v0.1.9...v0.1.10
 [0.1.9]: https://github.com/ouziel-slama/zeldwallet/compare/v0.1.8...v0.1.9

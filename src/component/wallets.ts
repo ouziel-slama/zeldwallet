@@ -336,7 +336,7 @@ const connectWith = async (
   const provider = await resolveProvider(entry);
   const requestFn = typeof provider?.request === 'function' ? provider.request.bind(provider) : undefined;
   const addressParams = {
-    purposes: ['payment', 'ordinals'],
+    purposes: [SatsPurpose.Payment, SatsPurpose.Ordinals],
     network: buildNetworkParams(network),
     message: requestMessage,
   };
@@ -378,13 +378,28 @@ const connectWith = async (
     });
   }
 
+  if (isXverse) {
+    // Xverse prefers the sats-connect getAddress helper; wallet_connect with params
+    // can throw "Invalid parameters" in newer builds.
+    attempts.push({
+      label: 'xverse.getAddress',
+      fn: () =>
+        new Promise((resolve, reject) => {
+          getAddress({
+            getProvider: async () => provider as BitcoinProvider | undefined,
+            payload: {
+              purposes: addressParams.purposes,
+              message: addressParams.message,
+              network: addressParams.network,
+            },
+            onFinish: (response) => resolve(response),
+            onCancel: () => reject(codedError('User cancelled.', 'user-cancelled')),
+          });
+        }),
+    });
+  }
+
   if (requestFn) {
-    if (isXverse) {
-      attempts.push({
-        label: 'request(wallet_connect)',
-        fn: () => requestFn('wallet_connect', addressParams),
-      });
-    }
     attempts.push({
       label: 'request(getAddresses)',
       fn: () => requestFn('getAddresses', addressParams),
