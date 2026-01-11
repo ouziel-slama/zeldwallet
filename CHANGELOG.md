@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.14] - 2025-01-11
+
+### Fixed
+
+- Fixed backup/restore not preserving custom derivation paths across domains
+- Backups now include `customPaths` so that wallets with non-standard derivation paths (e.g., MagicEden-style) can be restored on different domains with the same addresses
+
 ## [0.1.13] - 2025-01-07
 
 ### Fixed

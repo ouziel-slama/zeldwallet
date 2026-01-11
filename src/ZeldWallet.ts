@@ -428,13 +428,25 @@ export class ZeldWallet {
       wipeBytes(storedPassphraseBytes);
     }
     
-    const backup = {
+    const backup: {
+      version: number;
+      mnemonic: string;
+      network: NetworkType;
+      createdAt: number;
+      passphrase?: string;
+      customPaths?: { payment?: string; ordinals?: string };
+    } = {
       version: 1,
       mnemonic,
       network: this.keyManager.getNetwork(),
       createdAt: Date.now(),
       passphrase: storedPassphrase,
     };
+    
+    // Include custom derivation paths if configured (required for cross-domain portability)
+    if (this.config.customPaths) {
+      backup.customPaths = this.config.customPaths;
+    }
     
     // Encrypt the JSON with explicit envelope metadata
     const payloadBytes = stringToBytes(JSON.stringify(backup));
@@ -547,7 +559,14 @@ export class ZeldWallet {
 
     let decryptedBytes: Uint8Array | null = null;
     let decrypted = '';
-    let backup: { version?: number; mnemonic?: string; network?: NetworkType; passphrase?: string; createdAt?: number } | null = null;
+    let backup: { 
+      version?: number; 
+      mnemonic?: string; 
+      network?: NetworkType; 
+      passphrase?: string; 
+      createdAt?: number;
+      customPaths?: { payment?: string; ordinals?: string };
+    } | null = null;
     try {
       try {
         decryptedBytes = encryptedPayload
@@ -569,7 +588,8 @@ export class ZeldWallet {
         await this.destroy();
       }
 
-      await this.restore(backup.mnemonic, walletPw, backup.passphrase);
+      // Pass customPaths to restore for cross-domain backup portability
+      await this.restore(backup.mnemonic, walletPw, backup.passphrase, backup.customPaths);
       
       if (backup.network) {
         await this.setNetwork(backup.network);

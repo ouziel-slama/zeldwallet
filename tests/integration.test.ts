@@ -185,7 +185,8 @@ describe('ZeldWallet Integration', () => {
     it('should export and import backup', async () => {
       await wallet.create();
       await wallet.setPassword('backup-wallet-password');
-      const addresses1 = wallet.getAddresses(['payment']);
+      const addresses1 = wallet.getAddresses(['payment', 'ordinals']);
+      const network1 = wallet.getNetwork();
       
       const backup = await wallet.exportBackup('backup-password');
       expect(backup).toBeTruthy();
@@ -193,14 +194,23 @@ describe('ZeldWallet Integration', () => {
       expect(envelope.mac).toBeTruthy();
       expect(envelope.macAlgo).toBe('HMAC-SHA256');
       
-      // Destroy and reimport
+      // Destroy and reimport (simulates cross-domain restore)
       await wallet.destroy();
       wallet = new ZeldWallet();
       
       await wallet.importBackup(backup, 'backup-password', 'backup-wallet-password');
       
-      const addresses2 = wallet.getAddresses(['payment']);
-      expect(addresses1[0].address).toBe(addresses2[0].address);
+      const addresses2 = wallet.getAddresses(['payment', 'ordinals']);
+      const network2 = wallet.getNetwork();
+      
+      // Verify both payment and ordinals addresses match
+      expect(addresses2.length).toBe(2);
+      expect(addresses2[0].address).toBe(addresses1[0].address);
+      expect(addresses2[1].address).toBe(addresses1[1].address);
+      expect(addresses2[0].derivationPath).toBe(addresses1[0].derivationPath);
+      expect(addresses2[1].derivationPath).toBe(addresses1[1].derivationPath);
+      // Verify network is preserved
+      expect(network2).toBe(network1);
     });
 
     it('rejects tampered backup metadata via MAC', async () => {
@@ -236,6 +246,39 @@ describe('ZeldWallet Integration', () => {
       const envelope = JSON.parse(bytesToString(base64ToBytes(backup)));
 
       expect(envelope.kdf.iterations).toBe(customIterations);
+    });
+
+    it('preserves custom derivation paths across backup/restore for cross-domain portability', async () => {
+      // Custom derivation paths (e.g., MagicEden-style paths)
+      const customPaths = {
+        payment: "m/84'/0'/0'/0/0",
+        ordinals: "m/86'/0'/1'/0/0", // Non-standard ordinals path
+      };
+
+      // Create a wallet with a known mnemonic and custom paths
+      const testMnemonic = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
+      await wallet.restore(testMnemonic, 'wallet-password', undefined, customPaths);
+      
+      const addresses1 = wallet.getAddresses(['payment', 'ordinals']);
+      expect(addresses1.length).toBe(2);
+
+      // Export the backup
+      const backup = await wallet.exportBackup('backup-password');
+
+      // Destroy the wallet
+      await wallet.destroy();
+      wallet = new ZeldWallet();
+
+      // Import the backup (simulating a different domain)
+      await wallet.importBackup(backup, 'backup-password', 'wallet-password');
+
+      // Verify the addresses match (custom paths were restored)
+      const addresses2 = wallet.getAddresses(['payment', 'ordinals']);
+      expect(addresses2.length).toBe(2);
+      expect(addresses2[0].address).toBe(addresses1[0].address);
+      expect(addresses2[1].address).toBe(addresses1[1].address);
+      expect(addresses2[0].derivationPath).toBe(customPaths.payment);
+      expect(addresses2[1].derivationPath).toBe(customPaths.ordinals);
     });
   });
 
